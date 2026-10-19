@@ -164,33 +164,35 @@ too, because the stranger holds both.
 ## Live on Sepolia
 
 Ethereum Sepolia, chain id 11155111. Deployed with [`script/DeployEth.s.sol`](script/DeployEth.s.sol) at block
-PENDING.
+11950682.
 
 | Contract | Address |
 |---|---|
-| AirlockAdmin | PENDING |
-| AirlockReceiver | PENDING |
-| DemoBTC proxy (dBTC) | PENDING |
-| ProxyAdmin | PENDING |
-| DemoBTC v1 | PENDING |
-| DemoBTC v2 (honest upgrade) | PENDING |
-| EvilMintImpl | PENDING |
-| EvilOwnerImpl | PENDING |
-| EvilFeeImpl | PENDING |
-| EvilBaseFeeImpl | PENDING |
-| EvilDrainImpl | PENDING |
-| PausedImpl (break-glass target) | PENDING |
+| AirlockAdmin | [`0x28e7aAC40560804F480e454bF9C12F50C83b700B`](https://sepolia.etherscan.io/address/0x28e7aAC40560804F480e454bF9C12F50C83b700B) |
+| AirlockReceiver | [`0xE40D463116F4Aa24d5E79776a65ED0f1b088c670`](https://sepolia.etherscan.io/address/0xE40D463116F4Aa24d5E79776a65ED0f1b088c670) |
+| DemoBTC proxy (dBTC) | [`0x88Cc569265faDAEAc2a16B69f35E10B2158e4b71`](https://sepolia.etherscan.io/address/0x88Cc569265faDAEAc2a16B69f35E10B2158e4b71) |
+| ProxyAdmin | [`0x51a3fE6AD22BF7753574B7b7FD56aE9a65bd593E`](https://sepolia.etherscan.io/address/0x51a3fE6AD22BF7753574B7b7FD56aE9a65bd593E) |
+| DemoBTC v1 | [`0x8f7d6453d77B3f3b008CBE4A144d82c5742eB108`](https://sepolia.etherscan.io/address/0x8f7d6453d77B3f3b008CBE4A144d82c5742eB108) |
+| DemoBTC v2 (honest upgrade) | [`0x4D959f981C01E3B81ac6C9A20E84816Fe5f6Bce3`](https://sepolia.etherscan.io/address/0x4D959f981C01E3B81ac6C9A20E84816Fe5f6Bce3) |
+| EvilMintImpl | [`0x01502c4af90c27f53B2E1293941670C6B761CAAA`](https://sepolia.etherscan.io/address/0x01502c4af90c27f53B2E1293941670C6B761CAAA) |
+| EvilOwnerImpl | [`0xBe849DE8e0a4D9b0010ba1468f94Eeb24A42d488`](https://sepolia.etherscan.io/address/0xBe849DE8e0a4D9b0010ba1468f94Eeb24A42d488) |
+| EvilFeeImpl | [`0xB95Ffa7b970B1a73488e2fC32B787fA536F12AF5`](https://sepolia.etherscan.io/address/0xB95Ffa7b970B1a73488e2fC32B787fA536F12AF5) |
+| EvilBaseFeeImpl | [`0xE1AAa4E88DB9cc7ceCca14722eE2874D834e0310`](https://sepolia.etherscan.io/address/0xE1AAa4E88DB9cc7ceCca14722eE2874D834e0310) |
+| EvilDrainImpl | [`0x1d98D64BC5204AE139B5A0747855841Fa5333b6d`](https://sepolia.etherscan.io/address/0x1d98D64BC5204AE139B5A0747855841Fa5333b6d) |
+| PausedImpl (break-glass target) | [`0xb6573006fB607E96966d0F578B96AAB25413F5BE`](https://sepolia.etherscan.io/address/0xb6573006fB607E96966d0F578B96AAB25413F5BE) |
 | Chainlink MockKeystoneForwarder | [`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://sepolia.etherscan.io/address/0x15fC6ae953E024d975e77382eEeC56A9101f9F88) |
 
 | Card | Proposal | CRE verdict | Proposal tx | Report tx | Then |
 |---|---|---|---|---|---|
-| `v2`: honest upgrade | PENDING | Clear | PENDING | PENDING | `execute` PENDING, `version()` = "2" |
-| `evil-mint`: anyone can mint | PENDING | Veto R1 | PENDING | PENDING | `execute` reverts `ProposalVetoed` |
-| `evil-owner`: anyone can take ownership | PENDING | Veto R2 | PENDING | PENDING | `execute` reverts `ProposalVetoed` |
-| `evil-fee`: transfers skim 10% | PENDING | Veto R3 | PENDING | PENDING | `execute` reverts `ProposalVetoed` |
-| `evil-basefee`: mint opens on a real block | PENDING | Veto R9 | PENDING | PENDING | `execute` reverts `ProposalVetoed` |
-| `evil-drain`: anyone moves a holder's tokens | PENDING | Veto R3B | PENDING | PENDING | `execute` reverts `ProposalVetoed` |
-| `remove-receiver`: drop CRE as a guardian | PENDING | Veto R7 | PENDING | PENDING | `execute` reverts `ProposalVetoed` |
+| `v2`: honest upgrade | #4 | Clear | [11950745](https://sepolia.etherscan.io/tx/0x3cd96ac220391e2b404d35591d1a96808b75256e7c685a414e2ca5a63bc54145) | [11950747 (+2)](https://sepolia.etherscan.io/tx/0x2c02d2a23016a72509900eb7ce92dabc06b0dd93a2394d076a62d687ce467efb) | `execute` [11950772](https://sepolia.etherscan.io/tx/0x01913c1854b9862763af74ddacd7be23a7f55232af7334714aa8213aa7021890), `version()` = "2" |
+| `evil-mint`: anyone can mint | #1 | Veto R1 | [11950735](https://sepolia.etherscan.io/tx/0x862c5fdf826a8fef09fe2ff278d3e58191f93c267dbdd38ad9aaa270f39937b0) | [11950736 (+1)](https://sepolia.etherscan.io/tx/0xb0d74e25e2528fb9aad7d21de202dac288cd256048f2986b5214280fda4b84f6) | `execute` reverts `ProposalVetoed` |
+| `evil-owner`: anyone can take ownership | #6 | Veto R2 | [11950788](https://sepolia.etherscan.io/tx/0x32eb22039bd43602e0406b1a8f9a02c5cbcdb5cf2ef1c389919a45d05820da25) | [11950790 (+2)](https://sepolia.etherscan.io/tx/0x49451bee7a2f3351b18992d94b5f89b9ff89cf53be65a937400ab95fb79be551) | `execute` reverts `ProposalVetoed` |
+| `evil-fee`: transfers skim 10% | #7 | Veto R3 | [11950792](https://sepolia.etherscan.io/tx/0xe06924c2e3961ab27d2803c0654b783fc06e52107345bda9bfeff391053fcad3) | [11950794 (+2)](https://sepolia.etherscan.io/tx/0x01f6055a683e0dabc8f34ae094e5daa5a81ddb11c687aa9c5ac6e30c7a7f3d3b) | `execute` reverts `ProposalVetoed` |
+| `evil-basefee`: mint opens on a real block | #3 | Veto R9 | [11950742](https://sepolia.etherscan.io/tx/0x3c29c118ca395ca92500abcaae6126244924fbd8e14f846af57b70f113cad6e1) | [11950743 (+1)](https://sepolia.etherscan.io/tx/0xb6db2d832112384287e5a7ccdd086127931360900d09c80645c21eac2bc165db) | `execute` reverts `ProposalVetoed` |
+| `evil-drain`: anyone moves a holder's tokens | #2 | Veto R3B | [11950737](https://sepolia.etherscan.io/tx/0x0e52369921040eb0c901ac3a077aff762d370b4efd9503a52c91360d56366b16) | [11950740 (+3)](https://sepolia.etherscan.io/tx/0x40bbe374a8cee47a94da977f973cf66a67573c12bc84117483fcbd11430f90cb) | `execute` reverts `ProposalVetoed` |
+| `remove-receiver`: drop CRE as a guardian | #5 | Veto R7 | [11950749](https://sepolia.etherscan.io/tx/0xda2bd1c9dc5f7770da3926358b8da3ffe5a1cd3154b499cafae440387eebb934) | [11950750 (+1)](https://sepolia.etherscan.io/tx/0xaa2f598bdcc7f46727e5456528521e50ac5c1d8e423805042cbf2d10a4c4cdac) | `execute` reverts `ProposalVetoed` |
+
+Every verdict above came from the official CRE CLI running this workflow on a server (the log-trigger listener plus the 60-second sweeper, `scripts/sepolia/systemd/`); the workflow's own log lines are in [`docs/evidence/sepolia-live.md`](docs/evidence/sepolia-live.md).
 
 ## Run it
 

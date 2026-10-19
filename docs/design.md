@@ -95,7 +95,7 @@ verdict has reached simply has no clearance. That is the property the whole desi
 | The log trigger misses a proposal, or the workflow run fails | No clearance: the proposal waits; the sweeper judges it on a later run while its id is among the newest `sweepWindow` |
 | A provider is down or rate-limited | Errors are left out of the quorum; with fewer than `minAgree` answers the verdict is R6 (veto) |
 | Providers disagree | R6 (veto) |
-| The report transaction fails, or `onReport` reverts (the forwarder does not propagate the revert) | No clearance; the workflow reads the proposal back and logs `not-accepted`, and the sweeper tries again |
+| The report transaction fails, or `onReport` reverts (the forwarder does not propagate the revert) | No clearance; the workflow reads the proposal back and logs `unconfirmed`, and the sweeper tries again |
 | CRE cannot answer at all | The approver clears by hand with a published evidence JSON (`scripts/sepolia/clear.sh`); the sweeper still judges the proposal once CRE answers again, and a CRE or guardian veto wins. The approver's clearance is an override: a proposal CRE never reaches runs on it alone |
 
 A wrong veto costs a new proposal. A wrong clearance could let an attacker in, so every uncertain case resolves to

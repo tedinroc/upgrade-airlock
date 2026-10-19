@@ -382,14 +382,14 @@ describe('sweeper path', () => {
     const e = canonicalEvidence({ chainId: 11155111n, airlockAdmin: ADMIN, proposal: p, proposalDigest: proposalDigest(p), verdict: { verdict: 'pass', rule: null } })
     expect(evidenceHashOf(e)).toBe(viaLog as Hex)
   })
-  test('a report the receiver rejects (here: expired) is reported as not accepted', () => {
+  test('a report the receiver rejects (here: expired) is reported as unconfirmed', () => {
     const id = chain.propose(KIND.Upgrade, GOOD)
     const real = chain.write.bind(chain)
     chain.write = (payload: Hex) => {
       chain.block += 1000n // the transaction lands long after validUntilBlock
       return real(payload)
     }
-    expect(run(() => handleProposed(ports(), cfg, id)).action).toBe('not-accepted')
+    expect(run(() => handleProposed(ports(), cfg, id)).action).toBe('unconfirmed')
     expect(chain.proposal(id).clearance).toBe(ZERO_HASH)
   })
   test('judgement cost estimates', () => {
@@ -440,7 +440,7 @@ describe('approver clearances do not count as a workflow verdict (oracleJudged)'
     expect([again.action, again.reason]).toEqual(['skipped', 'already judged by this workflow'])
     expect(chain.reports.length).toBe(n)
   })
-  test('a rejected Clear on an approver-cleared proposal is reported as not accepted (clearanceOf alone is no proof)', () => {
+  test('a rejected Clear on an approver-cleared proposal is reported as unconfirmed (clearanceOf alone is no proof)', () => {
     const id = chain.propose(KIND.Upgrade, GOOD)
     chain.approverClear(id)
     const real = chain.write.bind(chain)
@@ -449,7 +449,7 @@ describe('approver clearances do not count as a workflow verdict (oracleJudged)'
       return real(payload)
     }
     const o = run(() => handleProposed(ports(), cfg, id))
-    expect(o.action).toBe('not-accepted')
+    expect(o.action).toBe('unconfirmed')
     expect(chain.proposal(id).clearance).not.toBe(ZERO_HASH)
     expect(chain.proposal(id).oracleJudged).toBe(false)
   })

@@ -50,7 +50,7 @@ export interface Ports {
 export type Outcome = {
   id: string
   kind: number
-  action: 'cleared' | 'vetoed' | 'skipped' | 'deferred' | 'not-accepted' | 'failed'
+  action: 'cleared' | 'vetoed' | 'skipped' | 'deferred' | 'unconfirmed' | 'failed'
   reason: string
   verdict?: 'pass' | 'veto'
   rule?: RuleId | null
@@ -251,7 +251,7 @@ export function deliverVerdict(ports: Ports, cfg: Config, p: Proposal, v: Verdic
   const base: Outcome = {
     id: p.id.toString(),
     kind: p.kind,
-    action: 'not-accepted',
+    action: 'failed',
     reason: '',
     verdict: verdict.verdict,
     rule: verdict.rule,
@@ -265,15 +265,17 @@ export function deliverVerdict(ports: Ports, cfg: Config, p: Proposal, v: Verdic
     return { ...base, reason: `writeReport failed: ${w.error ?? 'unknown error'}` }
   }
   // The forwarder swallows a reverting onReport: a successful transaction is not proof, the proposal state is.
-  // oracleJudged is the receiver's own mark (an approver clearance already makes clearanceOf non-zero).
+  // oracleJudged is the receiver's own mark (an approver clearance already makes clearanceOf non-zero). A read that
+  // does not show the verdict cannot tell a rejected report from a node that has not caught up yet, so it is
+  // 'unconfirmed', not a failure: the sweeper re-judges any proposal whose oracleJudged is still false.
   const [after] = readProposals(ports.chain, cfg, [p.id])
   const accepted = after.oracleJudged && (action === ACTION.Veto ? after.status === STATUS.Vetoed : after.status !== STATUS.Vetoed)
   const out: Outcome = {
     ...base,
-    action: accepted ? (action === ACTION.Veto ? 'vetoed' : 'cleared') : 'not-accepted',
+    action: accepted ? (action === ACTION.Veto ? 'vetoed' : 'cleared') : 'unconfirmed',
     reason: accepted
       ? `${name} accepted${action === ACTION.Clear && after.clearance !== evidenceHash ? ` (clearanceOf keeps the earlier clearance ${after.clearance})` : ''}`
-      : `${name} sent but proposal is ${STATUS_NAME[after.status]}, oracleJudged ${after.oracleJudged}`,
+      : `${name} sent; the read shows ${STATUS_NAME[after.status]}, oracleJudged ${after.oracleJudged} (rejected, or the node is behind; the sweeper re-checks)`,
   }
   ports.log(`#${p.id} ${name} tx ${w.tx ?? '(none)'} -> ${out.action} (status ${STATUS_NAME[after.status]})`)
   return out

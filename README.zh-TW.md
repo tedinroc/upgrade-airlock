@@ -96,33 +96,35 @@ R3B 堵住的是悄悄掏空。`EvilDrainImpl` 就是 v1 加上一個沒有權�
 
 ## Sepolia 上線狀態
 
-Ethereum Sepolia，chain id 11155111。以 [`script/DeployEth.s.sol`](script/DeployEth.s.sol) 部署於區塊 PENDING。
+Ethereum Sepolia，chain id 11155111。以 [`script/DeployEth.s.sol`](script/DeployEth.s.sol) 部署於區塊 11950682。
 
 | 合約 | 地址 |
 |---|---|
-| AirlockAdmin | PENDING |
-| AirlockReceiver | PENDING |
-| DemoBTC 代理合約（dBTC） | PENDING |
-| ProxyAdmin | PENDING |
-| DemoBTC v1 | PENDING |
-| DemoBTC v2（正常升級） | PENDING |
-| EvilMintImpl | PENDING |
-| EvilOwnerImpl | PENDING |
-| EvilFeeImpl | PENDING |
-| EvilBaseFeeImpl | PENDING |
-| EvilDrainImpl | PENDING |
-| PausedImpl（緊急暫停目標） | PENDING |
+| AirlockAdmin | [`0x28e7aAC40560804F480e454bF9C12F50C83b700B`](https://sepolia.etherscan.io/address/0x28e7aAC40560804F480e454bF9C12F50C83b700B) |
+| AirlockReceiver | [`0xE40D463116F4Aa24d5E79776a65ED0f1b088c670`](https://sepolia.etherscan.io/address/0xE40D463116F4Aa24d5E79776a65ED0f1b088c670) |
+| DemoBTC 代理合約（dBTC） | [`0x88Cc569265faDAEAc2a16B69f35E10B2158e4b71`](https://sepolia.etherscan.io/address/0x88Cc569265faDAEAc2a16B69f35E10B2158e4b71) |
+| ProxyAdmin | [`0x51a3fE6AD22BF7753574B7b7FD56aE9a65bd593E`](https://sepolia.etherscan.io/address/0x51a3fE6AD22BF7753574B7b7FD56aE9a65bd593E) |
+| DemoBTC v1 | [`0x8f7d6453d77B3f3b008CBE4A144d82c5742eB108`](https://sepolia.etherscan.io/address/0x8f7d6453d77B3f3b008CBE4A144d82c5742eB108) |
+| DemoBTC v2（正常升級） | [`0x4D959f981C01E3B81ac6C9A20E84816Fe5f6Bce3`](https://sepolia.etherscan.io/address/0x4D959f981C01E3B81ac6C9A20E84816Fe5f6Bce3) |
+| EvilMintImpl | [`0x01502c4af90c27f53B2E1293941670C6B761CAAA`](https://sepolia.etherscan.io/address/0x01502c4af90c27f53B2E1293941670C6B761CAAA) |
+| EvilOwnerImpl | [`0xBe849DE8e0a4D9b0010ba1468f94Eeb24A42d488`](https://sepolia.etherscan.io/address/0xBe849DE8e0a4D9b0010ba1468f94Eeb24A42d488) |
+| EvilFeeImpl | [`0xB95Ffa7b970B1a73488e2fC32B787fA536F12AF5`](https://sepolia.etherscan.io/address/0xB95Ffa7b970B1a73488e2fC32B787fA536F12AF5) |
+| EvilBaseFeeImpl | [`0xE1AAa4E88DB9cc7ceCca14722eE2874D834e0310`](https://sepolia.etherscan.io/address/0xE1AAa4E88DB9cc7ceCca14722eE2874D834e0310) |
+| EvilDrainImpl | [`0x1d98D64BC5204AE139B5A0747855841Fa5333b6d`](https://sepolia.etherscan.io/address/0x1d98D64BC5204AE139B5A0747855841Fa5333b6d) |
+| PausedImpl（緊急暫停目標） | [`0xb6573006fB607E96966d0F578B96AAB25413F5BE`](https://sepolia.etherscan.io/address/0xb6573006fB607E96966d0F578B96AAB25413F5BE) |
 | Chainlink MockKeystoneForwarder | [`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://sepolia.etherscan.io/address/0x15fC6ae953E024d975e77382eEeC56A9101f9F88) |
 
 | 卡片 | 提案 | CRE 判決 | 提案交易 | 報告交易 | 之後 |
 |---|---|---|---|---|---|
-| `v2`：正常升級 | PENDING | 放行 | PENDING | PENDING | `execute` PENDING，`version()` = "2" |
-| `evil-mint`：任何人都能鑄幣 | PENDING | 否決 R1 | PENDING | PENDING | `execute` revert `ProposalVetoed` |
-| `evil-owner`：任何人都能奪取擁有權 | PENDING | 否決 R2 | PENDING | PENDING | `execute` revert `ProposalVetoed` |
-| `evil-fee`：轉帳偷抽 10% | PENDING | 否決 R3 | PENDING | PENDING | `execute` revert `ProposalVetoed` |
-| `evil-basefee`：真實區塊上開放鑄幣 | PENDING | 否決 R9 | PENDING | PENDING | `execute` revert `ProposalVetoed` |
-| `evil-drain`：任何人都能搬走持有人的代幣 | PENDING | 否決 R3B | PENDING | PENDING | `execute` revert `ProposalVetoed` |
-| `remove-receiver`：把 CRE 從 guardian 移除 | PENDING | 否決 R7 | PENDING | PENDING | `execute` revert `ProposalVetoed` |
+| `v2`：正常升級 | #4 | 放行 | [11950745](https://sepolia.etherscan.io/tx/0x3cd96ac220391e2b404d35591d1a96808b75256e7c685a414e2ca5a63bc54145) | [11950747 (+2)](https://sepolia.etherscan.io/tx/0x2c02d2a23016a72509900eb7ce92dabc06b0dd93a2394d076a62d687ce467efb) | `execute` [11950772](https://sepolia.etherscan.io/tx/0x01913c1854b9862763af74ddacd7be23a7f55232af7334714aa8213aa7021890)，`version()` = "2" |
+| `evil-mint`：任何人都能鑄幣 | #1 | 否決 R1 | [11950735](https://sepolia.etherscan.io/tx/0x862c5fdf826a8fef09fe2ff278d3e58191f93c267dbdd38ad9aaa270f39937b0) | [11950736 (+1)](https://sepolia.etherscan.io/tx/0xb0d74e25e2528fb9aad7d21de202dac288cd256048f2986b5214280fda4b84f6) | `execute` revert `ProposalVetoed` |
+| `evil-owner`：任何人都能奪取擁有權 | #6 | 否決 R2 | [11950788](https://sepolia.etherscan.io/tx/0x32eb22039bd43602e0406b1a8f9a02c5cbcdb5cf2ef1c389919a45d05820da25) | [11950790 (+2)](https://sepolia.etherscan.io/tx/0x49451bee7a2f3351b18992d94b5f89b9ff89cf53be65a937400ab95fb79be551) | `execute` revert `ProposalVetoed` |
+| `evil-fee`：轉帳偷抽 10% | #7 | 否決 R3 | [11950792](https://sepolia.etherscan.io/tx/0xe06924c2e3961ab27d2803c0654b783fc06e52107345bda9bfeff391053fcad3) | [11950794 (+2)](https://sepolia.etherscan.io/tx/0x01f6055a683e0dabc8f34ae094e5daa5a81ddb11c687aa9c5ac6e30c7a7f3d3b) | `execute` revert `ProposalVetoed` |
+| `evil-basefee`：真實區塊上開放鑄幣 | #3 | 否決 R9 | [11950742](https://sepolia.etherscan.io/tx/0x3c29c118ca395ca92500abcaae6126244924fbd8e14f846af57b70f113cad6e1) | [11950743 (+1)](https://sepolia.etherscan.io/tx/0xb6db2d832112384287e5a7ccdd086127931360900d09c80645c21eac2bc165db) | `execute` revert `ProposalVetoed` |
+| `evil-drain`：任何人都能搬走持有人的代幣 | #2 | 否決 R3B | [11950737](https://sepolia.etherscan.io/tx/0x0e52369921040eb0c901ac3a077aff762d370b4efd9503a52c91360d56366b16) | [11950740 (+3)](https://sepolia.etherscan.io/tx/0x40bbe374a8cee47a94da977f973cf66a67573c12bc84117483fcbd11430f90cb) | `execute` revert `ProposalVetoed` |
+| `remove-receiver`：把 CRE 從 guardian 移除 | #5 | 否決 R7 | [11950749](https://sepolia.etherscan.io/tx/0xda2bd1c9dc5f7770da3926358b8da3ffe5a1cd3154b499cafae440387eebb934) | [11950750 (+1)](https://sepolia.etherscan.io/tx/0xaa2f598bdcc7f46727e5456528521e50ac5c1d8e423805042cbf2d10a4c4cdac) | `execute` revert `ProposalVetoed` |
+
+上表每個判定都由官方 CRE CLI 在伺服器上執行本 workflow 產生（log 觸發監聽器＋每 60 秒的補掃，`scripts/sepolia/systemd/`）；workflow 自己的日誌在 [`docs/evidence/sepolia-live.md`](docs/evidence/sepolia-live.md)。
 
 ## 自己跑一遍
 
