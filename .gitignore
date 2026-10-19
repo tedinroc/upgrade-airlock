@@ -39,3 +39,7 @@ cre/veto/config.fork.json
 
 # generated from deployments/sepolia.json by scripts/sepolia/make-config.mjs
 cre/veto/config.sepolia.json
+
+# forge per-run copies and locks (run-latest.json is the public record)
+broadcast/**/run-[0-9]*.json
+broadcast/**/*.recovery.lock
