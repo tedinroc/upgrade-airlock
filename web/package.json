@@ -1,0 +1,23 @@
+{
+  "name": "upgrade-airlock-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc",
+    "selftest": "rolldown -c test/rolldown.config.mjs && node node_modules/.cache/airlock-selftest.mjs && node node_modules/.cache/offline-selftest.mjs",
+    "sync:sepolia": "node scripts/sync-sepolia-data.mjs",
+    "record:run": "node scripts/record-run.mjs",
+    "build:airlock": "node scripts/sync-sepolia-data.mjs && tsc && vite build --outDir dist-airlock"
+  },
+  "dependencies": {
+    "viem": "2.57.2"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vite": "8.3.4"
+  }
+}

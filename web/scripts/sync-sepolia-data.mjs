@@ -1,0 +1,115 @@
+// Copies the public deployment data the war room needs into src/chain-data-sepolia.json.
+// Source: the JSON written by script/DeployEth.s.sol (OUT_JSON; keys chainId, startBlock, owner, approver,
+// emergencyGuardian, attester, forwarder, delayBlocks, holders, proxy, proxyAdmin, receiver, airlockAdmin, v1, v2,
+// evilMint, evilOwner, evilFee, evilBaseFee, evilDrain, paused).
+//
+//   node scripts/sync-sepolia-data.mjs                       default ../deployments/sepolia.json (npm run sync:sepolia)
+//   node scripts/sync-sepolia-data.mjs <deployment.json>     any DeployEth output, e.g. a local fork rehearsal
+//   node scripts/sync-sepolia-data.mjs --require             release check: fail unless a valid deployment exists
+//   node scripts/sync-sepolia-data.mjs <file> --out <file>   write somewhere else (tests; vite.config.ts reuses
+//                                                            buildChainData through AIRLOCK_DEPLOYMENT)
+//
+// A missing file, or a file without an airlockAdmin key, gives a placeholder (pending: true):
+// the build still passes and the page says the contracts are not deployed yet. Only public data is copied
+// (addresses and numbers); no local path ever goes into the output.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+export const SEPOLIA = 11155111
+const ADDR = /^0x[0-9a-fA-F]{40}$/
+const ZERO = '0x0000000000000000000000000000000000000000'
+const IMPLS = ['v1', 'v2', 'evilMint', 'evilOwner', 'evilFee', 'evilBaseFee', 'evilDrain', 'paused']
+const ROLES = ['airlockAdmin', 'proxy', 'receiver', 'emergencyGuardian', 'approver', 'owner']
+
+export const PLACEHOLDER = Object.freeze({
+  pending: true,
+  chainId: SEPOLIA,
+  startBlock: 0,
+  delayBlocks: 25,
+  airlockAdmin: ZERO,
+  proxy: ZERO,
+  receiver: '0x0000000000000000000000000000000000000001',
+  emergencyGuardian: '0x0000000000000000000000000000000000000002',
+  approver: '0x0000000000000000000000000000000000000003',
+  owner: ZERO,
+  attester: ZERO,
+  forwarder: ZERO,
+  impls: {},
+})
+
+const isAddr = (v) => typeof v === 'string' && ADDR.test(v) && v.toLowerCase() !== ZERO
+
+/** true when the file is a DeployEth output of this contract layout (has airlockAdmin) */
+export const isAirlockDeployment = (dep) => !!dep && typeof dep === 'object' && 'airlockAdmin' in dep
+
+/** DeployEth output -> chain data; throws with the list of bad fields */
+export function buildChainData(dep) {
+  const bad = []
+  if (Number(dep.chainId) !== SEPOLIA) bad.push(`chainId=${dep.chainId} (want ${SEPOLIA})`)
+  for (const k of ROLES) if (!isAddr(dep[k])) bad.push(k)
+  if (!(Number(dep.delayBlocks) > 0)) bad.push('delayBlocks')
+  if (!(Number(dep.startBlock) >= 0)) bad.push('startBlock')
+  const lc = (k) => String(dep[k] ?? '').toLowerCase()
+  if (isAddr(dep.approver) && lc('approver') === lc('owner')) bad.push('approver == owner')
+  if (isAddr(dep.emergencyGuardian) && lc('emergencyGuardian') === lc('owner')) bad.push('emergencyGuardian == owner')
+  if (isAddr(dep.approver) && lc('approver') === lc('emergencyGuardian')) bad.push('approver == emergencyGuardian')
+  if (bad.length) throw new Error(`deployment file is missing or has bad fields: ${bad.join(', ')}`)
+  const impls = {}
+  for (const k of IMPLS) if (isAddr(dep[k])) impls[k] = dep[k]
+  return {
+    pending: false,
+    chainId: SEPOLIA,
+    startBlock: Number(dep.startBlock),
+    delayBlocks: Number(dep.delayBlocks),
+    airlockAdmin: dep.airlockAdmin,
+    proxy: dep.proxy,
+    receiver: dep.receiver,
+    emergencyGuardian: dep.emergencyGuardian,
+    approver: dep.approver,
+    owner: dep.owner,
+    attester: isAddr(dep.attester) ? dep.attester : ZERO,
+    forwarder: isAddr(dep.forwarder) ? dep.forwarder : ZERO,
+    impls,
+  }
+}
+
+function main() {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const argv = process.argv.slice(2)
+  const require = argv.includes('--require')
+  const outIdx = argv.indexOf('--out')
+  const outPath = outIdx >= 0 ? resolve(argv[outIdx + 1] ?? '') : join(here, '..', 'src', 'chain-data-sepolia.json')
+  const positional = argv.filter((a, i) => !a.startsWith('--') && !(outIdx >= 0 && i === outIdx + 1))
+  const depPath = positional[0] ? resolve(positional[0]) : join(here, '..', '..', 'deployments', 'sepolia.json')
+  const fail = (msg) => {
+    console.error(msg)
+    process.exit(1)
+  }
+
+  let out = PLACEHOLDER
+  let note = 'placeholder: no deployment file yet'
+  if (existsSync(depPath)) {
+    let dep
+    try {
+      dep = JSON.parse(readFileSync(depPath, 'utf8'))
+    } catch (e) {
+      fail(`deployment file is not JSON: ${e.message}`)
+    }
+    if (isAirlockDeployment(dep)) {
+      try {
+        out = buildChainData(dep)
+      } catch (e) {
+        fail(e.message)
+      }
+      note = `AirlockAdmin ${out.airlockAdmin}, AirlockReceiver ${out.receiver}, emergency guardian ${out.emergencyGuardian}, cooldown ${out.delayBlocks} blocks`
+    } else {
+      note = 'placeholder: the deployment file has no airlockAdmin (deploy script/DeployEth.s.sol again)'
+    }
+  }
+  if (require && out.pending) fail(`--require: ${note}`)
+  writeFileSync(outPath, JSON.stringify(out, null, 2) + '\n')
+  console.log(`chain-data-sepolia.json: ${note}`)
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main()

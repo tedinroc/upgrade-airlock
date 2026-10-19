@@ -1,0 +1,44 @@
+{
+  "chainSelectorName": "ethereum-testnet-sepolia",
+  "chainId": 11155111,
+  "airlockAdmin": "0x1111111111111111111111111111111111111111",
+  "receiver": "0x2222222222222222222222222222222222222222",
+  "proxy": "0x3333333333333333333333333333333333333333",
+  "holders": [
+    "0x50D70Ff5338289b11E91A0fF5336DB29BDd510e0",
+    "0x01B22bF1E81f3563727E0F7BD6c2415B87136Da5",
+    "0x22421cA36b30D2D4Db5c32fEd40505530D52Ea22"
+  ],
+  "watch": [
+    "0x4444444444444444444444444444444444444444",
+    "0x1111111111111111111111111111111111111111"
+  ],
+  "rpcs": [
+    {
+      "url": "https://ethereum-sepolia-rpc.publicnode.com",
+      "label": "publicnode"
+    },
+    {
+      "url": "https://sepolia.drpc.org",
+      "label": "drpc"
+    },
+    {
+      "url": "https://11155111.rpc.thirdweb.com",
+      "label": "thirdweb"
+    },
+    {
+      "url": "https://1rpc.io/sepolia",
+      "label": "1rpc"
+    }
+  ],
+  "minAgree": 2,
+  "strict": false,
+  "callGas": 1000000,
+  "readGas": 200000,
+  "maxCalls": 150,
+  "gasLimit": "2000000",
+  "reportGraceBlocks": 50,
+  "logConfidence": "LATEST",
+  "sweepSchedule": "0 * * * * *",
+  "sweepWindow": 20
+}

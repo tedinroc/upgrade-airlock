@@ -1,0 +1,19 @@
+# Upgrade Airlock CRE workflow: per-target settings.
+#   sepolia-fork : simulate --broadcast against a local `anvil --fork-url <sepolia>` (no ETH spent)
+#   sepolia      : simulate --broadcast against live Ethereum Sepolia (CRE_ETH_PRIVATE_KEY pays the report tx)
+# Triggers: --trigger-index 0 = AirlockAdmin.Proposed log (with --evm-tx-hash), 1 = the cron sweeper (runs once).
+sepolia-fork:
+  user-workflow:
+    workflow-name: "upgrade-airlock"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.fork.json"
+    secrets-path: "../secrets.yaml"
+
+sepolia:
+  user-workflow:
+    workflow-name: "upgrade-airlock"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.sepolia.json"
+    secrets-path: "../secrets.yaml"

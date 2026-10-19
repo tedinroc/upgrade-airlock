@@ -1,0 +1,15 @@
+# Upgrade Airlock sweeper: one run of the CRE workflow's cron handler (scripts/sepolia/sweep.sh).
+# Started by airlock-sweep.timer every 60 s; install.sh fills in the kit directory and the env file path.
+[Unit]
+Description=Upgrade Airlock sweeper (judge proposals the listener missed)
+Documentation=file://@KIT@/README.md
+
+[Service]
+Type=oneshot
+EnvironmentFile=@ENV_FILE@
+WorkingDirectory=@KIT@
+ExecStart=@KIT@/sweep.sh
+# a CRE execution may take up to 5 minutes; sweep.sh exits at once when nothing waits for a verdict
+TimeoutStartSec=6min
+Nice=5
+NoNewPrivileges=yes

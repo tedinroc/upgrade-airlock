@@ -1,0 +1,14 @@
+# Runs airlock-sweep.service at second 0 of every minute. Persistent: a run missed while the machine was off or
+# the user manager was stopped happens once at the next start. A run still going when the next one is due
+# is not started twice (systemd skips an active unit; sweep.sh also holds a lock).
+[Unit]
+Description=Run the Upgrade Airlock sweeper every 60 s
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
+Persistent=true
+Unit=airlock-sweep.service
+
+[Install]
+WantedBy=timers.target

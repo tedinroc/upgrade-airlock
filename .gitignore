@@ -1,0 +1,41 @@
+# Foundry
+out/
+cache/
+broadcast/*/31337/
+broadcast/*/*/dry-run/
+deployments/*.31337.json
+
+# Node
+node_modules/
+# a symlinked node_modules is not matched by "node_modules/"
+node_modules
+dist/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+keystore/
+.dev.vars*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+.claude/settings.local.json
+
+# Private event prep (not part of the submission); also holds prep/blocked-names.txt, the name list the web
+# self-test's identity scan reads at test time (web/test/scan.ts), so the list itself never enters the repo
+prep/
+
+# CRE toolchain (cre/setup.sh)
+cre/.tools/
+
+# CRE build output and generated fork config
+cre/veto/.cre_build_tmp.js
+cre/veto/binary.wasm
+cre/veto/config.fork.json
+
+# generated from deployments/sepolia.json by scripts/sepolia/make-config.mjs
+cre/veto/config.sepolia.json

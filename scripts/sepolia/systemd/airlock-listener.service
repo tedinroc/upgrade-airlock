@@ -1,0 +1,22 @@
+# Upgrade Airlock listener: the CRE workflow's log trigger in listen mode (scripts/sepolia/airlock.sh).
+# A systemd user unit; install.sh fills in the kit directory and the env file path and installs it for the current user only.
+[Unit]
+Description=Upgrade Airlock listener (CRE log trigger: judge every AirlockAdmin proposal)
+Documentation=file://@KIT@/README.md
+# keep restarting however often it fails (a network outage can last longer than any burst limit)
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile=@ENV_FILE@
+WorkingDirectory=@KIT@
+ExecStart=@KIT@/airlock.sh
+Restart=always
+RestartSec=5
+# airlock.sh stops the simulator on SIGTERM; the whole process group goes after TimeoutStopSec
+KillMode=control-group
+TimeoutStopSec=20
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

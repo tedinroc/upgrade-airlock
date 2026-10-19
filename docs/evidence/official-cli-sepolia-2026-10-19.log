@@ -1,0 +1,34 @@
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: d1a5e3eff3b845acb69520abe1d627b50536d2ae06003a771146d3360f16784a
+  Config hash: 464f4b0b5dfacc86efd44c4d746a9d034cc2e8499782f12b5dee0ed6ee4c812d
+Fetching transaction receipt for 0xd7ce10b4303f41704ac5c68bd41ecdee035c4bd1876c238dbdad336fc8accb67...
+2026-10-19T14:46:50Z [SIMULATION] Simulator Initialized
+
+2026-10-19T14:46:50Z [SIMULATION] Running trigger trigger=evm:ChainSelector:16015286601757825753@1.0.0
+2026-10-19T14:46:54Z [USER LOG] #5 providers: publicnode=veto:R1_TOTAL_SUPPLY drpc=veto:R1_TOTAL_SUPPLY thirdweb=veto:R1_TOTAL_SUPPLY 1rpc=error(HTTP 429)
+2026-10-19T14:46:54Z [USER LOG] #5 verdict veto R1_TOTAL_SUPPLY (quorum of 2; 77 probes over 15 selectors) | R1_TOTAL_SUPPLY: 17500000000 -> 680564733841876926926749214881036422912
+2026-10-19T14:46:54Z [USER LOG] #5 evidence 0xf3726e5704d9970a9a0284c171b55c5b580bad3270ff8413f0275e851a93e0f5 validUntilBlock 11948929 digest 0x52cae9ab874f9e84af2b98eb4dfd3b4a253f31d26785061f7438fb0f808bc375
+
+✓ Workflow Simulation Result:
+"{\"proposalId\":\"5\",\"kind\":0,\"block\":\"11948854\",\"txHash\":\"0xd7ce10b4303f41704ac5c68bd41ecdee035c4bd1876c238dbdad336fc8accb67\",\"action\":\"vetoed\",\"reason\":\"quorum of 2\",\"rule\":\"R1_TOTAL_SUPPLY\",\"evidenceHash\":\"0xf3726e5704d9970a9a0284c171b55c5b580bad3270ff8413f0275e851a93e0f5\",\"validUntilBlock\":\"11948929\",\"vetoTx\":\"0x5b13abc4b8d6673ab5462cde529607917e3ab03df6d2efeceab427cfe82e69dc\",\"status\":2}"
+
+time=2026-10-19T14:46:59.786Z level=INFO msg="context canceled"
+time=2026-10-19T14:46:59.786Z level=INFO msg="context canceled"
+2026-10-19T14:46:59Z [SIMULATION] Execution finished signal received
+2026-10-19T14:46:59Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯
+
+⚠️  Update available! You’re running 1.37.0, but 1.38.0 is the latest.
+Run `cre update` or visit https://github.com/smartcontractkit/cre-cli/releases to upgrade.
+

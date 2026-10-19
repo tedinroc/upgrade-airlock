@@ -1,0 +1,53 @@
+# Ethereum (Sepolia) build. `FOUNDRY_PROFILE=eth` selects [profile.eth], which is identical to the default.
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+
+solc_version = "0.8.37"       # pinned; must already be in the local svm cache for --offline builds
+evm_version = "osaka"
+network = "ethereum"
+optimizer = true
+optimizer_runs = 10_000
+via_ir = false
+
+# Keep the default metadata hash: Sourcify returns `exact_match` only when the CBOR metadata is present.
+bytecode_hash = "ipfs"
+cbor_metadata = true
+
+# Remappings are explicit (remappings.txt). Auto-detection would pick up the upgradeable package's own
+# remapping to its (empty) git-submodule copy of openzeppelin-contracts.
+auto_detect_remappings = false
+
+fs_permissions = [
+  { access = "read", path = "./" },
+  { access = "read-write", path = "./deployments" },
+  { access = "read-write", path = "./cache" },
+]
+
+[fuzz]
+runs = 1_000
+
+[invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+
+# Kept so `FOUNDRY_PROFILE=eth` keeps working in scripts; everything else is inherited from the default profile.
+[profile.eth]
+network = "ethereum"
+
+# Use with `--rpc-url sepolia` (or any other key below).
+[rpc_endpoints]
+sepolia = "https://ethereum-sepolia-rpc.publicnode.com"
+sepolia_drpc = "https://sepolia.drpc.org"
+sepolia_1rpc = "https://1rpc.io/sepolia"
+
+# Contract verification (Sourcify):
+#   FOUNDRY_PROFILE=eth forge verify-contract <address> src/AirlockAdmin.sol:AirlockAdmin --chain sepolia \
+#     --verifier sourcify --watch
+
+[fmt]
+line_length = 120

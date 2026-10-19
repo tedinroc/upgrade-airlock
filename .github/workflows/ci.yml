@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    env:
+      FOUNDRY_PROFILE: eth
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      # online once so the toolchain can fetch the pinned solc; the tests then run offline
+      - run: forge build
+      - run: forge test --offline
+
+  workflow:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cre/veto
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun test
+      - run: bun run typecheck
+
+  web:
+    runs-on: ubuntu-latest
+    env:
+      CI: "1"
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run selftest
+      - run: npm run build
