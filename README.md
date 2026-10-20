@@ -1,12 +1,58 @@
-**English** · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+<div align="center">
 
 # Upgrade Airlock
 
-**Upgrade Airlock gives every contract upgrade two doors.** The outer door is a cooldown measured in blocks. The
-inner door opens only when a Chainlink CRE workflow has attacked the new implementation in a simulator on four
+**Every proxy upgrade passes two doors: a cooldown, and a Chainlink CRE clearance that only code surviving an attack simulation can earn.**
+
+**English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md) · [Tiếng Việt](README.vi.md)
+
+[![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
+[![Ethereum Sepolia](https://img.shields.io/badge/Ethereum-Sepolia-627EEA?logo=ethereum&logoColor=white)](https://sepolia.etherscan.io/address/0x28e7aAC40560804F480e454bF9C12F50C83b700B)
+[![Chainlink CRE](https://img.shields.io/badge/Chainlink-CRE-375BD2?logo=chainlink&logoColor=white)](#chainlink-cre)
+
+[Highlights](#highlights) · [How it works](#how-it-works) · [Rules](#rules) · [Chainlink CRE](#chainlink-cre) · [Live on Sepolia](#live-on-sepolia) · [Quick start](#quick-start) · [Security model](#security-model)
+
+</div>
+
+## Overview
+
+Upgrade Airlock gives every contract upgrade two doors. The **outer door** is a cooldown measured in blocks. The
+**inner door** opens only when a Chainlink CRE workflow has attacked the new implementation in a simulator on four
 independent RPC providers, every answer has agreed, the DON has reached consensus on the verdict, and a signed
 **Clear** report has landed on chain. A malicious implementation gets a signed **Veto** instead and can never run,
 even when the attacker holds the upgrade key. Built for ETH Shenzhen 2026 on Ethereum Sepolia.
+
+> [!TIP]
+> **Live demo: [upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)**
+>
+> The war room reads Ethereum Sepolia straight from your browser, read-only. Each proposal is drawn as an airlock:
+> the **outer door** records the proposal, the **chamber** counts down the cooldown, and the **inner door** stays
+> locked until Chainlink CRE's Clear lands on chain. A Veto ejects the proposal, with its rule, evidence hash and
+> transaction. The page opens in Simplified Chinese: [`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en)
+> switches to English and [`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) to Traditional Chinese.
+> Every transaction behind it is listed in [the live-run evidence](docs/evidence/sepolia-live.md).
+
+## Highlights
+
+- **Fail-closed by construction.** An upgrade runs only with a clearance on chain. A missed log, an RPC outage,
+  disagreeing providers or a failed run leaves the proposal uncleared or vetoed: it can delay an upgrade, never let
+  one through. A veto always beats a clearance.
+- **An attack, not a checklist.** Every DON node runs the upgrade against the proxy's real state with
+  `eth_simulateV1` on four RPC providers. A funded stranger calls every selector in the new bytecode, holder-shaped
+  arguments hit every new function, and supply, ownership and balances are compared before and after. At least two
+  providers must answer, and every answer must agree.
+- **Verdicts bound to the proposal.** The DON reaches consensus on `{verdict, rule}`. The report carries an EIP-712
+  attestation bound to the proposal's exact content (`proposalDigest`), the chain, the receiver and a block
+  deadline, plus an evidence hash anyone can recompute from chain data.
+- **Nothing left unjudged.** A cron sweeper checks the newest 20 proposals every 60 seconds and judges any the log
+  trigger missed, including upgrades the approver cleared by hand; its veto wins.
+- **Live on Ethereum Sepolia.** The official CRE CLI ran the workflow on a server and answered seven proposals on
+  chain: one honest upgrade cleared and executed, six attacks vetoed (R1, R2, R3, R3B, R7, R9). Every contract is
+  verified on Sourcify.
+- **Tested end to end.** 117 Foundry tests, 118 workflow unit tests and 137 war-room self-test checks run in
+  [CI](.github/workflows/ci.yml); a fork end-to-end script drives the full loop through the CRE simulator.
 
 ## The problem
 
@@ -29,50 +75,58 @@ decentralized check has passed it, and that check runs automatically on every pr
 
 ## How it works
 
-```
- owner key (assume it leaks)
-   │ proposeUpgrade(newImpl, data)
-   ▼
- AirlockAdmin ─────────── Proposed(id, kind, target, codehash, readyBlock) ────────────┐
-   │  outer door: cooldown of delayBlocks (25 blocks, about 5 minutes on Sepolia)      │
-   │  inner door: clearanceOf[id] != 0                                                 ▼
-   │                                   ┌──────────── Chainlink CRE workflow (cre/veto) ────────────┐
-   │                                   │ EVM log trigger on Proposed  (+ cron sweeper every 60 s)  │
-   │                                   │ EVM reads: proposal, approvals, balances, block header    │
-   │                                   │ node mode, on every DON node:                             │
-   │                                   │   attack simulation (eth_simulateV1) on 4 RPC providers   │
-   │                                   │   every answer must agree, else fail closed (R6)          │
-   │                                   │ DON consensus on {verdict, rule}                          │
-   │                                   │ evidence hash + EIP-712 attestation -> report             │
-   │                                   └──────────────────────────┬────────────────────────────────┘
-   │                                                     writeReport -> KeystoneForwarder
-   │                                                              ▼
-   │◄── clear(id, evidenceHash)  or  veto(id, ruleHash) ── AirlockReceiver.onReport
-   ▼
- execute(id): cooldown over AND cleared AND not vetoed  ->  ProxyAdmin.upgradeAndCall(proxy, newImpl, data)
+```mermaid
+sequenceDiagram
+    actor Owner as Owner key (assume it leaks)
+    participant Admin as AirlockAdmin
+    participant CRE as Chainlink CRE workflow
+    participant RPC as 4 RPC providers
+    participant Fwd as KeystoneForwarder
+    participant Recv as AirlockReceiver
+    actor Anyone
+
+    Owner->>Admin: proposeUpgrade(newImpl, data)
+    Note over Admin: Outer door: cooldown of 25 blocks, about 5 minutes on Sepolia
+    Admin-->>CRE: Proposed log (EVM log trigger), or the cron sweeper every 60 s
+    CRE->>Admin: EVM reads at the proposal block
+    loop On every DON node, for each provider
+        CRE->>RPC: eth_getCode, then the eth_simulateV1 attack simulation
+        RPC-->>CRE: verdict and rule
+    end
+    Note over CRE: Quorum: at least 2 answers, all equal, else Veto R6<br/>DON consensus on the verdict and rule<br/>evidence hash and EIP-712 attestation
+    CRE->>Fwd: writeReport
+    Fwd->>Recv: onReport(metadata, report)
+    alt Every check passed
+        Recv->>Admin: clear(id, evidenceHash)
+    else A rule failed
+        Recv->>Admin: veto(id, ruleHash) and attachReason(id, evidenceHash)
+    end
+    Anyone->>Admin: execute(id)
+    Note over Admin: Inner door: cooldown over, cleared, not vetoed, codehash unchanged
+    Admin->>Admin: ProxyAdmin.upgradeAndCall(proxy, newImpl, data)
 ```
 
 1. **Propose.** `AirlockAdmin` owns the OpenZeppelin `ProxyAdmin` and the token's `Ownable`. The owner key can only
-   propose: it is never a guardian, the approver or the clearance oracle. Every proposal (an upgrade, or a change
-   to the airlock itself: guardians, delay, break-glass target) gets `readyBlock = block.number + delayBlocks`.
-   An upgrade or break-glass target must be ordinary contract code: an EIP-7702 delegated account, whose key could
+   propose: it is never a guardian, the approver or the clearance oracle. Every proposal (an upgrade, or a change to
+   the airlock itself: guardians, delay, break-glass target) gets `readyBlock = block.number + delayBlocks`. An
+   upgrade or break-glass target must be ordinary contract code: an EIP-7702 delegated account, whose key could
    re-point it after the verdict, is refused (`DelegatedAccount`).
 2. **Judge.** The CRE log trigger fires on `Proposed`. A change to the airlock is judged from chain reads (R7). An
    upgrade first meets the static rules (R5, R8), then the attack simulation, pinned to the proposal block: the
    proxy's ERC-1967 implementation slot is overridden with the new code, and a fresh stranger address (derived from
-   the proposal block's hash) is funded like a real user, with tokens from a second holder and ETH. A holder makes a
-   transfer, the stranger calls `transferFrom` without allowance, then every selector found in the new bytecode with
-   five argument shapes. Every selector outside the standard token interface is also called with holder-shaped
+   the proposal block's hash) is funded like a real user, with tokens from a second holder and ETH. A holder makes
+   a transfer, the stranger calls `transferFrom` without allowance, then every selector found in the new bytecode
+   with five argument shapes. Every selector outside the standard token interface is also called with holder-shaped
    arguments: the funded holder in each of the first four argument slots, the test amount in another, the stranger
-   or the proxy in the rest. Supply, owner and every watched balance are read before and after, the holder's
-   balance right after each holder-shaped call, and every probe's own events are checked (R1 to R4, R3B). Finally
-   the new bytecode is scanned for opcodes that behave differently on a real block than in a simulation (R9).
+   or the proxy in the rest. Supply, owner and every watched balance are read before and after, the holder's balance
+   right after each holder-shaped call, and every probe's own events are checked (R1 to R4, R3B). Finally the new
+   bytecode is scanned for opcodes that behave differently on a real block than in a simulation (R9).
 3. **Agree.** Each DON node runs the simulation on four providers. At least two must answer and every answer must
    be the same verdict; anything else is a veto (R6). The DON then agrees on the identical `{verdict, rule}`.
 4. **Report.** The workflow hashes a canonical evidence JSON, signs an EIP-712 verdict with its attester key (a CRE
    secret), and writes the report through the forwarder. `AirlockReceiver` checks the sender, the freshness, the
-   signature and that the verdict is bound to this exact proposal (`proposalDigest`), then calls `clear` or
-   `veto` + `attachReason` on `AirlockAdmin`.
+   signature and that the verdict is bound to this exact proposal (`proposalDigest`), then calls `clear`, or `veto`
+   and `attachReason`, on `AirlockAdmin`.
 5. **Execute.** Anyone may call `execute(id)` once the cooldown is over. It reverts `TooEarly` during the cooldown,
    `NotCleared` without a clearance, `ProposalVetoed` after a veto, and `CodehashChanged` when the target no longer
    holds the code that was proposed and judged. A veto always beats a clearance.
@@ -80,56 +134,15 @@ decentralized check has passed it, and that check runs automatically on every pr
    has not answered yet (`oracleJudged`): a log the trigger missed, a `Proposed` event too large to deliver, or an
    upgrade the approver cleared by hand. Its veto wins over that clearance.
 
-Every failure points the same way. A missed log, an RPC outage, disagreeing providers or a failed run leaves the
-proposal without a clearance or vetoes it, so it delays an upgrade and never lets one through. When CRE cannot
-answer at all, the approver key can clear an upgrade by hand with recorded evidence. The sweeper still judges that
-upgrade once CRE answers again, and a CRE or guardian veto still wins. `breakGlass()` lets the owner or any guardian
-switch the proxy to a pre-registered paused implementation at once. Leaving the paused state is an ordinary upgrade
-through both doors.
+**Every failure points the same way.** A missed log, an RPC outage, disagreeing providers or a failed run leaves the
+proposal without a clearance or vetoes it, so it delays an upgrade and never lets one through. When CRE cannot answer
+at all, the approver key can clear an upgrade by hand with recorded evidence; the sweeper still judges that upgrade
+once CRE answers again, and a CRE or guardian veto still wins. `breakGlass()` lets the owner or any guardian switch
+the proxy to a pre-registered paused implementation at once. Leaving the paused state is an ordinary upgrade through
+both doors.
 
-**Two modes.** In automatic mode, the default, CRE clears or vetoes every upgrade on its own through a bounded attack
-search: a funded outside caller, every selector in the new code, and the holder in each of the first four argument
-slots of every new function. Strict mode (R5) adds a human review: every new implementation codehash must first be
-approved by the approver key, and the attack simulation still runs
-([the two modes](docs/design.md#two-modes-automatic-and-strict)).
-
-More detail: [docs/design.md](docs/design.md) (threat model, clearance state machine, report binding, budgets)
-and [cre/README.md](cre/README.md) (the workflow).
-
-## Chainlink CRE
-
-CRE is the orchestration layer of Upgrade Airlock: the workflow is the only automated way through the inner door,
-and it carries every step from the on-chain trigger to the on-chain verdict. It is written with the CRE TypeScript
-SDK (`@chainlink/cre-sdk` 1.23.0) and compiled to WASM with the CRE CLI v1.37.0.
-
-| Chainlink technology | Where | What it does here |
-|---|---|---|
-| CRE workflow runner | [`cre/veto/main.ts#L1-L9`](cre/veto/main.ts#L1-L9), [`cre/veto/workflow.yaml`](cre/veto/workflow.yaml), [`cre/project.yaml`](cre/project.yaml) | Two handlers, targets `sepolia` and `sepolia-fork` |
-| EVM log trigger | [`cre/veto/workflow.ts#L202-L211`](cre/veto/workflow.ts#L202-L211), [`#L193-L198`](cre/veto/workflow.ts#L193-L198), [`#L54-L65`](cre/veto/workflow.ts#L54-L65) | `AirlockAdmin.Proposed` at `LATEST`: a proposal is judged as soon as it appears, a whole cooldown before it could run |
-| Cron trigger | [`cre/veto/workflow.ts#L200`](cre/veto/workflow.ts#L200), [`#L209`](cre/veto/workflow.ts#L209), [`cre/veto/airlock.ts#L321-L387`](cre/veto/airlock.ts#L321-L387) | The sweeper: newest 20 ids, every minute |
-| EVM read (`callContract`) | [`cre/veto/workflow.ts#L114-L122`](cre/veto/workflow.ts#L114-L122), [`#L137-L142`](cre/veto/workflow.ts#L137-L142), [`cre/veto/chain.ts`](cre/veto/chain.ts) | Proposal, clearance, `oracleJudged`, approvals and balances, batched through Multicall3 at the proposal block or `LATEST` |
-| EVM read (`headerByNumber`) | [`cre/veto/workflow.ts#L125-L136`](cre/veto/workflow.ts#L125-L136) | The latest block, and the proposal block's hash that seeds the simulated stranger |
-| HTTP capability in node mode | [`cre/veto/workflow.ts#L167-L189`](cre/veto/workflow.ts#L167-L189), [`#L80-L94`](cre/veto/workflow.ts#L80-L94), [`cre/veto/judge.ts#L157-L220`](cre/veto/judge.ts#L157-L220) | Every node sends each provider `eth_getCode`, then one or two `eth_simulateV1` requests (each under the 120 kb request limit) |
-| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188), quorum in [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | The DON agrees on `{verdict, rule}` (at most 52 bytes) |
-| Secrets | [`cre/veto/workflow.ts#L160-L166`](cre/veto/workflow.ts#L160-L166), [`cre/secrets.yaml`](cre/secrets.yaml) | The EIP-712 attester key, fetched once per run |
-| Report + `writeReport` | [`cre/veto/workflow.ts#L143-L149`](cre/veto/workflow.ts#L143-L149), [`cre/veto/airlock.ts#L229-L280`](cre/veto/airlock.ts#L229-L280), [`cre/veto/report.ts`](cre/veto/report.ts) | `runtime.report` (ECDSA, keccak256) and `evm.writeReport`, then a read of the proposal to confirm the result |
-| Forwarder + `IReceiver` | [`src/cre/AirlockReceiver.sol#L88-L120`](src/cre/AirlockReceiver.sol#L88-L120), [`#L156-L169`](src/cre/AirlockReceiver.sol#L156-L169), [`src/cre/IReceiver.sol`](src/cre/IReceiver.sol), [`script/DeployEth.s.sol#L35`](script/DeployEth.s.sol#L35) | `onReport` accepts only the configured forwarder, checks workflow id and owner when configured |
-| Chain selectors | [`cre/veto/workflow.ts#L100-L104`](cre/veto/workflow.ts#L100-L104) | `ethereum-testnet-sepolia` |
-| CRE CLI | [`cre/setup.sh`](cre/setup.sh), [`cre/scripts/fork-e2e.sh`](cre/scripts/fork-e2e.sh), [`scripts/sepolia/airlock.sh`](scripts/sepolia/airlock.sh), [`scripts/sepolia/sweep.sh`](scripts/sepolia/sweep.sh) | `cre workflow build`, `cre workflow simulate --broadcast` |
-
-**How the workflow runs today.** The workflow runs with the CRE CLI's `cre workflow simulate --broadcast` against
-Ethereum Sepolia. The listener ([`scripts/sepolia/airlock.sh`](scripts/sepolia/airlock.sh)) keeps the log trigger
-in listen mode, the sweeper ([`scripts/sepolia/sweep.sh`](scripts/sepolia/sweep.sh)) runs the cron handler every
-minute, and every Clear and Veto is a real Sepolia transaction through Chainlink's Sepolia MockKeystoneForwarder
-[`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://docs.chain.link/cre/guides/workflow/using-evm-client/forwarder-directory-ts).
-`AirlockReceiver` is ready for a DON deployment as it is: deploy with `FORWARDER` set to the production
-KeystoneForwarder and `WORKFLOW_ID` / `WORKFLOW_OWNER` set, and `onReport` also checks the DON-signed workflow
-metadata. `DeployEth` refuses the permissionless MockKeystoneForwarder unless both are set or `ALLOW_MOCK_FORWARDER=1`
-says so explicitly ([`script/DeployEth.s.sol#L98`](script/DeployEth.s.sol#L98)).
-
-The workflow stays inside CRE's per-run limits by design: at most 15 chain reads (Multicall3 batches under the 5 kb
-payload limit), 12 of 15 HTTP calls with four providers, one attack simulation per run, and a consensus value of at
-most 52 bytes. The budgets are in [docs/design.md](docs/design.md#budgets).
+More detail: [docs/design.md](docs/design.md) (threat model, clearance state machine, report binding, budgets) and
+[cre/README.md](cre/README.md) (the workflow).
 
 ## Rules
 
@@ -148,23 +161,68 @@ most 52 bytes. The budgets are in [docs/design.md](docs/design.md#budgets).
 | R8 `INIT_DATA` | an upgrade carries init data the approver has not approved together with the codehash | chain reads |
 | R9 `NEW_OPCODES` | the new code contains a block or transaction context opcode (BASEFEE, TIMESTAMP, NUMBER, ORIGIN, GAS and more), an external call, create or selfdestruct that the config's fixed allowlist (empty by default) does not cover, unless the approver approved that exact codehash | bytecode |
 
-R9 closes simulation evasion. `EvilBaseFeeImpl` behaves like v1 while `block.basefee == 0`, which is what an
+**R9 closes simulation evasion.** `EvilBaseFeeImpl` behaves like v1 while `block.basefee == 0`, which is what an
 `eth_simulateV1` call sees, and lets anyone mint on a real block. Every simulated invariant passes; its `BASEFEE`
 opcode vetoes it. The allowlist never depends on the code the proxy runs today, so an approval covers one codehash
 and no later upgrade. The scan skips the compiler's metadata tail only when it is an exact solc CBOR map that no
 instruction can reach; anything else is scanned as code. Approving a codehash exempts it from R9 and excuses probe
 truncation (R6), nothing more: every other rule still runs.
 
-R3B closes the quiet drain. `EvilDrainImpl` is v1 plus `rescue(from, to, amount)` with no access control. Supply,
-owner, transfers and opcodes are those of v1, so R1 to R4 and R9 all pass. `rescue` is not a standard token
+**R3B closes the quiet drain.** `EvilDrainImpl` is v1 plus `rescue(from, to, amount)` with no access control.
+Supply, owner, transfers and opcodes are those of v1, so R1 to R4 and R9 all pass. `rescue` is not a standard token
 function, so the stranger also calls it with holder-shaped arguments; the call with the holder as `from` moves the
 holder's tokens, and R3B vetoes it. A drain that hides behind "only for callers who hold tokens or ETH" is reached
 too, because the stranger holds both.
 
+### Automatic and strict mode
+
+**Automatic mode**, the default, has CRE clear or veto every upgrade on its own through a bounded attack search: a
+funded outside caller, every selector in the new code, and the holder in each of the first four argument slots of
+every new function. **Strict mode** (R5) adds a human review: every new implementation codehash must first be
+approved by the approver key, and the attack simulation still runs. Automatic mode fits a token that wants routine
+upgrades cleared in minutes; strict mode makes a code review part of the clearance
+([the two modes](docs/design.md#two-modes-automatic-and-strict)).
+
+## Chainlink CRE
+
+CRE is the orchestration layer of Upgrade Airlock: the workflow is the only automated way through the inner door,
+and it carries every step from the on-chain trigger to the on-chain verdict. It is written with the CRE TypeScript
+SDK (`@chainlink/cre-sdk` 1.23.0) and compiled to WASM with the CRE CLI v1.37.0.
+
+| Chainlink technology | Where | What it does here |
+|---|---|---|
+| CRE workflow runner | [`cre/veto/main.ts#L1-L9`](cre/veto/main.ts#L1-L9), [`cre/veto/workflow.yaml`](cre/veto/workflow.yaml), [`cre/project.yaml`](cre/project.yaml) | Two handlers, targets `sepolia` and `sepolia-fork` |
+| EVM log trigger | [`cre/veto/workflow.ts#L202-L211`](cre/veto/workflow.ts#L202-L211), [`#L193-L198`](cre/veto/workflow.ts#L193-L198), [`#L54-L65`](cre/veto/workflow.ts#L54-L65) | `AirlockAdmin.Proposed` at `LATEST`: a proposal is judged as soon as it appears, a whole cooldown before it could run |
+| Cron trigger | [`cre/veto/workflow.ts#L200`](cre/veto/workflow.ts#L200), [`#L209`](cre/veto/workflow.ts#L209), [`cre/veto/airlock.ts#L323-L389`](cre/veto/airlock.ts#L323-L389) | The sweeper: newest 20 ids, every minute |
+| EVM read (`callContract`) | [`cre/veto/workflow.ts#L114-L122`](cre/veto/workflow.ts#L114-L122), [`#L137-L142`](cre/veto/workflow.ts#L137-L142), [`cre/veto/chain.ts`](cre/veto/chain.ts) | Proposal, clearance, `oracleJudged`, approvals and balances, batched through Multicall3 at the proposal block or `LATEST` |
+| EVM read (`headerByNumber`) | [`cre/veto/workflow.ts#L125-L136`](cre/veto/workflow.ts#L125-L136) | The latest block, and the proposal block's hash that seeds the simulated stranger |
+| HTTP capability in node mode | [`cre/veto/workflow.ts#L167-L189`](cre/veto/workflow.ts#L167-L189), [`#L80-L94`](cre/veto/workflow.ts#L80-L94), [`cre/veto/judge.ts#L157-L220`](cre/veto/judge.ts#L157-L220) | Every node sends each provider `eth_getCode`, then one or two `eth_simulateV1` requests (each under the 120 kb request limit) |
+| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188), quorum in [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | The DON agrees on `{verdict, rule}` (at most 52 bytes) |
+| Secrets | [`cre/veto/workflow.ts#L160-L166`](cre/veto/workflow.ts#L160-L166), [`cre/secrets.yaml`](cre/secrets.yaml) | The EIP-712 attester key, fetched once per run |
+| Report + `writeReport` | [`cre/veto/workflow.ts#L143-L149`](cre/veto/workflow.ts#L143-L149), [`cre/veto/airlock.ts#L229-L282`](cre/veto/airlock.ts#L229-L282), [`cre/veto/report.ts`](cre/veto/report.ts) | `runtime.report` (ECDSA, keccak256) and `evm.writeReport`, then a read of the proposal to confirm the result |
+| Forwarder + `IReceiver` | [`src/cre/AirlockReceiver.sol#L88-L120`](src/cre/AirlockReceiver.sol#L88-L120), [`#L156-L169`](src/cre/AirlockReceiver.sol#L156-L169), [`src/cre/IReceiver.sol`](src/cre/IReceiver.sol), [`script/DeployEth.s.sol#L142`](script/DeployEth.s.sol#L142) | `onReport` accepts only the configured forwarder and checks the workflow id and owner when configured |
+| Chain selectors | [`cre/veto/workflow.ts#L100-L104`](cre/veto/workflow.ts#L100-L104) | `ethereum-testnet-sepolia` |
+| CRE CLI | [`cre/setup.sh`](cre/setup.sh), [`cre/scripts/fork-e2e.sh`](cre/scripts/fork-e2e.sh), [`scripts/sepolia/airlock.sh`](scripts/sepolia/airlock.sh), [`scripts/sepolia/sweep.sh`](scripts/sepolia/sweep.sh) | `cre workflow build`, `cre workflow simulate --broadcast` |
+
+**How the workflow runs today.** The workflow runs with the CRE CLI's `cre workflow simulate --broadcast` against
+Ethereum Sepolia. The listener ([`scripts/sepolia/airlock.sh`](scripts/sepolia/airlock.sh)) keeps the log trigger
+in listen mode, the sweeper ([`scripts/sepolia/sweep.sh`](scripts/sepolia/sweep.sh)) runs the cron handler every
+minute, and every Clear and Veto is a real Sepolia transaction through Chainlink's Sepolia MockKeystoneForwarder
+[`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://docs.chain.link/cre/guides/workflow/using-evm-client/forwarder-directory-ts).
+`AirlockReceiver` is ready for a DON deployment as it is: deploy with `FORWARDER` set to the production
+KeystoneForwarder and `WORKFLOW_ID` / `WORKFLOW_OWNER` set, and `onReport` also checks the DON-signed workflow
+metadata. `DeployEth` refuses the permissionless MockKeystoneForwarder unless both are set or `ALLOW_MOCK_FORWARDER=1`
+says so explicitly ([`script/DeployEth.s.sol#L96-L104`](script/DeployEth.s.sol#L96-L104)).
+
+**Built for CRE's per-run limits.** At most 15 chain reads (Multicall3 batches under the 5 kb payload limit), 12 of
+15 HTTP calls with four providers, one attack simulation per run, and a consensus value of at most 52 bytes. The
+budgets are in [docs/design.md](docs/design.md#budgets).
+
 ## Live on Sepolia
 
 Ethereum Sepolia, chain id 11155111. Deployed with [`script/DeployEth.s.sol`](script/DeployEth.s.sol) at block
-11950682.
+11950682 (13 transactions); every contract is verified on Sourcify. Owner, approver, emergency guardian and attester
+are four different keys. The cooldown is 25 blocks.
 
 | Contract | Address |
 |---|---|
@@ -182,6 +240,9 @@ Ethereum Sepolia, chain id 11155111. Deployed with [`script/DeployEth.s.sol`](sc
 | PausedImpl (break-glass target) | [`0xb6573006fB607E96966d0F578B96AAB25413F5BE`](https://sepolia.etherscan.io/address/0xb6573006fB607E96966d0F578B96AAB25413F5BE) |
 | Chainlink MockKeystoneForwarder | [`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://sepolia.etherscan.io/address/0x15fC6ae953E024d975e77382eEeC56A9101f9F88) |
 
+Seven proposals, seven on-chain verdicts. The block in each link is the block the transaction landed in; `(+n)` is
+how many blocks after the proposal the CRE verdict arrived.
+
 | Card | Proposal | CRE verdict | Proposal tx | Report tx | Then |
 |---|---|---|---|---|---|
 | `v2`: honest upgrade | #4 | Clear | [11950745](https://sepolia.etherscan.io/tx/0x3cd96ac220391e2b404d35591d1a96808b75256e7c685a414e2ca5a63bc54145) | [11950747 (+2)](https://sepolia.etherscan.io/tx/0x2c02d2a23016a72509900eb7ce92dabc06b0dd93a2394d076a62d687ce467efb) | `execute` [11950772](https://sepolia.etherscan.io/tx/0x01913c1854b9862763af74ddacd7be23a7f55232af7334714aa8213aa7021890), `version()` = "2" |
@@ -192,12 +253,19 @@ Ethereum Sepolia, chain id 11155111. Deployed with [`script/DeployEth.s.sol`](sc
 | `evil-drain`: anyone moves a holder's tokens | #2 | Veto R3B | [11950737](https://sepolia.etherscan.io/tx/0x0e52369921040eb0c901ac3a077aff762d370b4efd9503a52c91360d56366b16) | [11950740 (+3)](https://sepolia.etherscan.io/tx/0x40bbe374a8cee47a94da977f973cf66a67573c12bc84117483fcbd11430f90cb) | `execute` reverts `ProposalVetoed` |
 | `remove-receiver`: drop CRE as a guardian | #5 | Veto R7 | [11950749](https://sepolia.etherscan.io/tx/0xda2bd1c9dc5f7770da3926358b8da3ffe5a1cd3154b499cafae440387eebb934) | [11950750 (+1)](https://sepolia.etherscan.io/tx/0xaa2f598bdcc7f46727e5456528521e50ac5c1d8e423805042cbf2d10a4c4cdac) | `execute` reverts `ProposalVetoed` |
 
-Every verdict above came from the official CRE CLI running this workflow on a server (the log-trigger listener plus the 60-second sweeper, `scripts/sepolia/systemd/`); the workflow's own log lines are in [`docs/evidence/sepolia-live.md`](docs/evidence/sepolia-live.md).
+Every verdict above came from the official CRE CLI running this workflow on a server (the log-trigger listener plus
+the 60-second sweeper, [`scripts/sepolia/systemd/`](scripts/sepolia/systemd)); the workflow's own log lines are in
+[`docs/evidence/sepolia-live.md`](docs/evidence/sepolia-live.md).
 
-## Run it
+## Quick start
 
-Needs [Foundry](https://getfoundry.sh), `jq`, Node 22, and a CRE account for the simulator. `cre/setup.sh`
-installs the CRE CLI v1.37.0 (SHA-256 pinned) and bun 1.4.2 into `cre/.tools`.
+### Prerequisites
+
+- [Foundry](https://getfoundry.sh) (`forge`, `cast`, `anvil`), `jq` and Node 22.
+- A CRE account for the simulator (`cre login`), used by the fork end-to-end run and the operator kit.
+- [`cre/setup.sh`](cre/setup.sh) installs the CRE CLI v1.37.0 (SHA-256 pinned) and bun 1.4.2 into `cre/.tools`.
+
+### Build and test
 
 ```bash
 git clone https://github.com/jiapunk/upgrade-airlock.git
@@ -212,34 +280,38 @@ cre/setup.sh
 export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 tests: rules, probes, bytecode, reports, budgets, handlers
 
-# end to end on a local anvil fork of Sepolia: nothing is sent to a live network
-cre login                       # once; the simulator needs a CRE account
-cre/scripts/fork-e2e.sh
+# the war room
+(cd web && npm ci && npm run selftest)            # 137 checks: live view and offline playback
 ```
 
-`cre/scripts/fork-e2e.sh` deploys the stack on the fork, runs the workflow in the CRE simulator with `--broadcast`
-and checks every outcome on chain:
+### End to end on a Sepolia fork
 
-- log trigger: EvilMint vetoed R1, EvilOwner R2, EvilFee R3, EvilBaseFee R9 (it names `BASEFEE`), EvilDrain R3B
-  (it names `rescue`, every other rule passing); seven more drains vetoed R3B alone: reordered arguments, a
+```bash
+cre login                       # once; the simulator needs a CRE account
+cre/scripts/fork-e2e.sh         # a local anvil fork of Sepolia: nothing is sent to a live network
+```
+
+[`cre/scripts/fork-e2e.sh`](cre/scripts/fork-e2e.sh) deploys the stack on the fork, runs the workflow in the CRE
+simulator with `--broadcast` and checks every outcome on chain:
+
+- **Log trigger:** EvilMint vetoed R1, EvilOwner R2, EvilFee R3, EvilBaseFee R9 (it names `BASEFEE`), EvilDrain R3B
+  (it names `rescue`, every other rule passing); seven more drains
+  ([`test/fixtures/DrainVariants.sol`](test/fixtures/DrainVariants.sol)) vetoed R3B alone: reordered arguments, a
   token-address guard, a drain open only to callers holding tokens or ETH, one without a `Transfer` event, and a
   `transferFrom` that skips the allowance for token holders; honest v2 cleared and executed after the cooldown;
-  removing the receiver as a guardian vetoed R7; a shorter delay pre-approved by the approver cleared;
-- sweeper: an upgrade nobody judged reverts `NotCleared` after the cooldown, one sweeper run clears it and it
+  removing the receiver as a guardian vetoed R7; a shorter delay pre-approved by the approver cleared.
+- **Sweeper:** an upgrade nobody judged reverts `NotCleared` after the cooldown, one sweeper run clears it and it
   executes; two proposals the approver cleared by hand are judged by the next run: EvilDrain vetoed R3B over the
-  clearance, a longer delay cleared by CRE as well; an upgrade with 6 KB of init data is vetoed R8 by the run after;
-- every vetoed proposal reverts `ProposalVetoed`, and every verdict's evidence hash is recomputed from chain data
-  ([`cre/veto/tools/check-evidence.ts`](cre/veto/tools/check-evidence.ts)).
+  clearance, a longer delay cleared by CRE as well; an upgrade with 6 KB of init data is vetoed R8 by the run after.
+- **Evidence:** every vetoed proposal reverts `ProposalVetoed`, and every verdict's evidence hash is recomputed from
+  chain data ([`cre/veto/tools/check-evidence.ts`](cre/veto/tools/check-evidence.ts)).
 
-**War room.** `cd web && npm ci && npm run dev`, then open `http://127.0.0.1:5173/`. It reads Sepolia directly
-(read-only) and shows each proposal as an airlock: the cooldown, the CRE clearance, the veto with its rule and
-evidence. `?mode=offline` plays a recorded run with no network at all, and `?lang=en|zh-TW|zh-CN` picks the
-language.
+### Sepolia operator kit
 
-**Sepolia operator kit** ([`scripts/sepolia/`](scripts/sepolia/README.md)). The keys live outside the repo, one hex
-key per file in `KEY_DIR` (`owner`, `attester`, `sender`, `approver`, `emergency`); the scripts never print them,
-and `deploy.sh` refuses unless owner, approver, emergency guardian and attester are four different keys. Every
-script also runs against a local fork with `FORK=<port>`, so the demo can be rehearsed without spending anything.
+[`scripts/sepolia/`](scripts/sepolia/README.md) runs the live demo. The keys live outside the repo, one hex key per
+file in `KEY_DIR` (`owner`, `attester`, `sender`, `approver`, `emergency`); the scripts never print them, and
+`deploy.sh` refuses unless owner, approver, emergency guardian and attester are four different keys. Every script
+also runs against a local fork with `FORK=<port>`, so the demo can be rehearsed without spending anything.
 
 ```bash
 scripts/sepolia/deploy.sh                    # 13 transactions, writes deployments/sepolia.json (FORCE=1 replaces one)
@@ -252,8 +324,29 @@ scripts/sepolia/status.sh                    # every proposal: verdict, CRE judg
 ```
 
 `sweep.sh` runs the cron sweeper once, `clear.sh` is the approver's manual clearance, `fork.sh` starts, saves and
-restores a Sepolia fork, `probe-rpcs.ts` checks every provider with the workflow's own judging code, and
-`systemd/` runs the listener and the sweeper on a Linux server.
+restores a Sepolia fork, `probe-rpcs.ts` checks every provider with the workflow's own judging code, and `systemd/`
+runs the listener and the sweeper on a Linux server.
+
+### War room
+
+```bash
+cd web
+npm ci
+npm run dev                     # http://127.0.0.1:5173/
+npm run build:airlock           # syncs deployments/sepolia.json into the page, builds web/dist-airlock
+```
+
+The war room reads Sepolia directly and never signs or sends. It shows each proposal as an airlock: the cooldown,
+the CRE clearance, the veto with its rule and evidence.
+
+| URL parameter | Effect |
+|---|---|
+| `?mode=airlock` | Default. Live view of Ethereum Sepolia, read-only |
+| `?mode=offline` | Plays a recorded run with no network connection at all |
+| `?lang=en`, `?lang=zh-TW`, `?lang=zh-CN` | Interface language (default `zh-CN`; `L` cycles through them) |
+| `?rpc=http://127.0.0.1:<port>` | Reads a local Sepolia fork instead, for rehearsals |
+
+Press `P` in live mode to replay the most recent proposals from their chain events.
 
 ## Repository layout
 
@@ -265,25 +358,72 @@ src/DemoBTC.sol, DemoBTCV2.sol  demo token (dBTC) v1 and the honest v2
 src/PausedImpl.sol              break-glass target: every balance change reverts
 src/attack/                     EvilMintImpl, EvilOwnerImpl, EvilFeeImpl, EvilBaseFeeImpl, EvilDrainImpl
 script/DeployEth.s.sol          deployment (13 transactions) with role, forwarder and post-deploy wiring checks
-test/                           Foundry tests
+test/                           Foundry tests; fixtures/DrainVariants.sol holds the seven drain variants
 cre/veto/                       the CRE workflow: workflow.ts (capabilities), airlock.ts (handlers), judge.ts (rules,
                                 quorum), simulate.ts (eth_simulateV1), bytecode.ts (selectors, R9), report.ts
                                 (report, EIP-712, evidence), chain.ts (read budget), keys.ts, rules.ts, config.ts
 cre/veto/test/                  Bun unit tests
-cre/veto/tools/                 check-evidence.ts: recomputes every on-chain evidence hash
+cre/veto/tools/                 check-evidence.ts recomputes every on-chain evidence hash
 cre/scripts/fork-e2e.sh         end to end on an anvil fork of Sepolia
 cre/setup.sh                    pinned CRE CLI and bun
-scripts/sepolia/                operator kit for the live demo
-web/                            war room (Vite, TypeScript)
-deployments/                    deployment JSON
-docs/                           design notes and recorded runs
+scripts/sepolia/                operator kit for the live demo, with systemd units for a server
+web/                            war room (Vite, TypeScript, viem)
+deployments/sepolia.json        the live deployment
+docs/design.md                  threat model, clearance state machine, report binding, budgets
+docs/evidence/                  the recorded live run
+.github/workflows/ci.yml        contracts, workflow and war room checks
 ```
+
+## Security model
+
+Upgrade Airlock assumes the owner key leaks, and is built so that the owner key alone can never run an upgrade.
+
+| Role | Held by | Can |
+|---|---|---|
+| Owner | one key | propose upgrades and changes to the airlock (guardians, delay, break-glass target); `breakGlass` |
+| Approver | a separate key | clear by hand when CRE cannot answer; approve codehashes, init data and airlock changes (`approveCodehash`) |
+| Emergency guardian | a separate key | `veto` a pending proposal; `breakGlass` |
+| Attester | a CRE secret, its own key | sign the EIP-712 verdicts `AirlockReceiver` accepts |
+| AirlockReceiver | the CRE report receiver | clearance oracle (`clear`) and guardian (`veto`, `attachReason`) |
+| Anyone | | `execute` a proposal that has passed both doors |
+
+Roles never overlap. The `AirlockAdmin` constructor refuses an owner that is also the approver, a guardian or the
+clearance oracle (`RoleOverlap`), and `DeployEth` deploys only when owner, approver, emergency guardian and attester
+are four different addresses.
+
+**A leaked owner key can propose.** Every proposal waits out the cooldown in plain view while CRE judges it, and
+needs a clearance the owner cannot give itself. The owner can also pull the emergency brake (`breakGlass`), which
+only switches the proxy to the pre-registered paused implementation; leaving it is an upgrade through both doors.
+
+**The same key cannot:**
+
+- execute without a clearance: `AirlockAdmin` has no generic call path, and the only way to change the
+  implementation is `execute` of a cleared upgrade (or `breakGlass` to the paused implementation);
+- weaken the airlock first: removing the CRE receiver, shortening the delay or swapping the break-glass target are
+  proposals too, and R7 vetoes them without the approver's pre-approval;
+- swap the code after the verdict: `execute` re-checks the target's codehash (`CodehashChanged`), and EIP-7702
+  delegated accounts are refused (`DelegatedAccount`);
+- forge or reuse a verdict: `AirlockReceiver` accepts a report only from the configured forwarder, signed by the
+  attester, no later than its `validUntilBlock`, and bound to the proposal's `proposalDigest` on this chain and
+  receiver.
+
+The approver's hand clearance is an override for when CRE cannot answer: the sweeper still judges that proposal
+while it is among the newest 20 ids, and a CRE or guardian veto wins. The full threat model is in
+[docs/design.md](docs/design.md#threat-model).
+
+## Built with
+
+- **Solidity 0.8.37** and **Foundry**, with OpenZeppelin Contracts 5.7.0 (`ProxyAdmin`,
+  `TransparentUpgradeableProxy`, `EIP712`, `ECDSA`)
+- **Chainlink CRE**: the TypeScript SDK (`@chainlink/cre-sdk` 1.23.0) and the CRE CLI v1.37.0, on Bun 1.4.2
+- **viem** for ABI encoding and chain reads, in the workflow and the war room
+- **Vite** and TypeScript for the war room
 
 ## AI tools
 
 Upgrade Airlock was built with [Claude Code](https://claude.com/claude-code) under the author's direction: the
-contracts, the CRE workflow, the tests, the scripts, the war room and these documents were written and checked
-with it.
+contracts, the CRE workflow, the tests, the scripts, the war room and these documents were written and checked with
+it.
 
 ## License
 
