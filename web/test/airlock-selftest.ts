@@ -624,7 +624,7 @@ setLang('zh-CN', false)
   blocks.ingest(1262)
   ok(P('7').kind === '1' && P('7').value === '0', 'Proposed.value is kept (guardian change: 0 = remove)')
   setLang('en', false)
-  ok(identOf(P('7')).title === 'Remove the Chainlink CRE guardian' && identOf(P('7')).name === 'Remove CRE guardian', 'a guardian change that removes the CRE receiver is named as such')
+  ok(identOf(P('7')).title === 'Remove the Chainlink CRE guardian' && identOf(P('7')).name === 'Remove CRE', 'a guardian change that removes the CRE receiver is named as such')
   const a = shot('7', 'en', true)
   const w = ['Proposal #7 · Guardian change', 'Remove the Chainlink CRE guardian', 'R7', "A guardian, cooldown or break-glass change without the approver's pre-approval.", 'R7 · Config not approved', 'Ejected · vetoed by Chainlink CRE']
   ok(lack(w, plain(a.h)) === '' && !a.h.includes('1'.repeat(64)) && !plain(a.h).includes('Workflow id'), `R7 veto of "remove the CRE receiver"; the placeholder workflow id stays hidden${lack(w, plain(a.h))}`)

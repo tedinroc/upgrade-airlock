@@ -530,7 +530,7 @@ const EN: Record<Key, string> = {
   'h.guardOn': 'Add {who} as a guardian',
   'h.delay': 'Change the cooldown to {n} blocks',
   'h.paused': 'New break-glass target {a}',
-  'h.nameRemoveCre': 'Remove CRE guardian',
+  'h.nameRemoveCre': 'Remove CRE',
   'h.nameGuard': 'Guardian change',
   'h.nameDelay': 'Cooldown change',
   'h.namePaused': 'Break-glass change',

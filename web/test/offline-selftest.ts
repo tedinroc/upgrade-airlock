@@ -128,7 +128,7 @@ if (RECORDING.source === 'none') {
   const strip = dom.els.get('strip')?.innerHTML ?? ''
   ok(ids.every((id) => strip.includes(`data-act="sel:${id}"`)), `strip: a card for each of the ${ids.length} recorded proposals`)
   const guard = ids.find((id) => R.proposals[id].kind === 1 && R.proposals[id].target.toLowerCase() === R.deployment.receiver.toLowerCase())
-  if (guard) ok(plain(strip).includes('Remove CRE guardian'), `#${guard}: "remove the CRE receiver" is named as such`)
+  if (guard) ok(plain(strip).includes('Remove CRE'), `#${guard}: "remove the CRE receiver" is named as such`)
   setLang('zh-CN', false)
   const every = [...rendered.values()].map((x) => x.zh + (x.tw ?? '') + (x.en ?? '')).join('')
   ok(findBlocked(every).length === 0, 'rendered offline page is clean of blocked names and local paths')
