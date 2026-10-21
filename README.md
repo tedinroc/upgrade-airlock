@@ -51,7 +51,7 @@ even when the attacker holds the upgrade key. Built for ETH Shenzhen 2026 on Eth
 - **Live on Ethereum Sepolia.** The official CRE CLI ran the workflow on a server and answered seven proposals on
   chain: one honest upgrade cleared and executed, six attacks vetoed (R1, R2, R3, R3B, R7, R9). Every contract is
   verified on Sourcify.
-- **Tested end to end.** 117 Foundry tests, 118 workflow unit tests and 137 war-room self-test checks run in
+- **Tested end to end.** 117 Foundry tests, 118 workflow unit tests and 199 war-room self-test checks run in
   [CI](.github/workflows/ci.yml); a fork end-to-end script drives the full loop through the CRE simulator.
 
 ## The problem
@@ -281,7 +281,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 tests: rules, probes, bytecode, reports, budgets, handlers
 
 # the war room
-(cd web && npm ci && npm run selftest)            # 137 checks: live view and offline playback
+(cd web && npm ci && npm run selftest)            # 199 checks: live view and offline playback
 ```
 
 ### End to end on a Sepolia fork

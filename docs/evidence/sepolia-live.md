@@ -29,8 +29,9 @@ Cooldown: 25 blocks (about 5 minutes at 12 s per block).
 | 5 | Remove the CRE receiver from the guardians | [11950749](https://sepolia.etherscan.io/tx/0xda2bd1c9dc5f7770da3926358b8da3ffe5a1cd3154b499cafae440387eebb934) | Veto R7_CONFIG_GUARD | [11950750](https://sepolia.etherscan.io/tx/0xaa2f598bdcc7f46727e5456528521e50ac5c1d8e423805042cbf2d10a4c4cdac) | 1 |
 | 6 | EvilOwner: anyone can take ownership | [11950788](https://sepolia.etherscan.io/tx/0x32eb22039bd43602e0406b1a8f9a02c5cbcdb5cf2ef1c389919a45d05820da25) | Veto R2_OWNER | [11950790](https://sepolia.etherscan.io/tx/0x49451bee7a2f3351b18992d94b5f89b9ff89cf53be65a937400ab95fb79be551) | 2 |
 | 7 | EvilFee: transfers skim 10% | [11950792](https://sepolia.etherscan.io/tx/0xe06924c2e3961ab27d2803c0654b783fc06e52107345bda9bfeff391053fcad3) | Veto R3_TRANSFER_CONSERVATION | [11950794](https://sepolia.etherscan.io/tx/0x01f6055a683e0dabc8f34ae094e5daa5a81ddb11c687aa9c5ac6e30c7a7f3d3b) | 2 |
+| 8 | EvilDrain again (the demo video's live take) | [11959564](https://sepolia.etherscan.io/tx/0x39fb5409a55a4b7323d8ddae98c974286f690a2f3ce42c324b52e4c4b9aa632f) | Veto R3B_THIRD_PARTY_FUNDS | [11959565](https://sepolia.etherscan.io/tx/0x253894929e1921e859b49035f4d1ef2877a9a6dee20a5799f2c0a3dc51741093) | 1 |
 
-Proposal #4 then executed after the cooldown in block [11950772](https://sepolia.etherscan.io/tx/0x01913c1854b9862763af74ddacd7be23a7f55232af7334714aa8213aa7021890) and the token's `version()` returned "2". `execute` of #1, #2, #3 and #5 reverts with `ProposalVetoed`. #6 and #7 were proposed later in the same run.
+Proposal #4 then executed after the cooldown in block [11950772](https://sepolia.etherscan.io/tx/0x01913c1854b9862763af74ddacd7be23a7f55232af7334714aa8213aa7021890) and the token's `version()` returned "2". `execute` of #1, #2, #3 and #5 reverts with `ProposalVetoed`. #6 and #7 were proposed later in the same run. #8 re-ran the evil-drain card on 2026-10-21 for the demo video; all four providers answered, and the veto landed one block after the proposal.
 
 ## Workflow log lines (CRE listener on the server)
 
@@ -69,4 +70,12 @@ Proposed #5 kind 1 target 0xe40d463116f4aa24d5e79776a65ed0f1b088c670 in block 11
 #5 verdict veto R7_CONFIG_GUARD (config change without approval: remove guardian 0xe40d463116f4aa24d5e79776a65ed0f1b088c670)
 #5 evidence {"airlockAdmin":"0x28e7aac40560804f480e454bf9c12f50c83b700b","chainId":"11155111","codehash":"0x0000000000000000000000000000000000000000000000000000000000000000","dataHash":"0xc5d2460186f7233c927e7db2dcc703c0e500b653ca
 #5 report Veto evidenceHash 0xbd5c85f25ebff132efcb69893adc4819fcdf5cf18d7c5b3608c9cac49cbbbda7 validUntilBlock 11950824 digest 0xad269add9d5d6c528a17ac8b596ede226d03c6be8198f41f0127d818aa3ef65a
+Proposed #8 kind 0 target 0x1d98d64bc5204ae139b5a0747855841fa5333b6d in block 11959564 (tx 0x39fb5409a55a4b7323d8ddae98c974286f690a2f3ce42c324b52e4c4b9aa632f)
+#8 providers: publicnode=veto:R3B_THIRD_PARTY_FUNDS drpc=veto:R3B_THIRD_PARTY_FUNDS thirdweb=veto:R3B_THIRD_PARTY_FUNDS 1rpc=veto:R3B_THIRD_PARTY_FUNDS
+#8 simulation veto R3B_THIRD_PARTY_FUNDS (quorum of 2; 130 probes over 16 selectors in 2 request(s); R9 opcodes: none) | R3B_THIRD_PARTY_FUNDS: transferFrom(holder, stranger) without allowance; funded-stranger probes -> 3 probe(s) with effects, 3 probe(s) drained the holder with no event
+#8 culprits: 0x20ff430b(h0,a2,s):drained-holder+moved-others-funds 0x20ff430b(h0,a2,p):drained-holder+moved-others-funds 0x20ff430b(h1,a2,s):drained-holder 0x20ff430b(h1,a2,p):moved-others-funds
+#8 verdict veto R3B_THIRD_PARTY_FUNDS (attack simulation, quorum of 2 (provider detail in the node logs))
+#8 evidence {"airlockAdmin":"0x28e7aac40560804f480e454bf9c12f50c83b700b","chainId":"11155111","codehash":"0x1b3aa02b98d3f818aee0a71e824869c24821e144e016f39ead4d16285f870dd4","dataHash":"0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470","kind":0,"proposalDigest":"0x12fd30de10c4c9ed4aef94e396973aad47cc94bb4d6bcf24bd67a627aa6c495f","proposalId":"8","proposedBlock":"11959564","proposer":"0x89758238ebc730028017f35360feab0d2abcc2dd","readyBlock":"11959589","rule":"R3B_THIRD_PARTY_FUNDS","schema":"upgrade-airlock/evidence-v2","target":"0x1d98d64bc5204ae139b5a0747855841fa5333b6d","value":"0","verdict":"veto"}
+#8 report Veto evidenceHash 0xa6227d0374f1dc56563c753fe277fdf4a60fecc872d5b9a08eb531a5471d0b21 validUntilBlock 11959639 digest 0xee323b95dbd8e1c2dd8a6ad3a29bb4e206f6dedacb960abd8a3860a0f32bdfd2
+#8 Veto tx 0x253894929e1921e859b49035f4d1ef2877a9a6dee20a5799f2c0a3dc51741093 -> vetoed (status Vetoed)
 ```

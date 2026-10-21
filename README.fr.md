@@ -55,7 +55,7 @@ de mise à niveau. Conçu pour ETH Shenzhen 2026 sur Ethereum Sepolia.
 - **En direct sur Ethereum Sepolia.** La CLI CRE officielle a exécuté le workflow sur un serveur et répondu on-chain à
   sept propositions : une mise à niveau honnête autorisée puis exécutée, six attaques bloquées par veto (R1, R2, R3,
   R3B, R7, R9). Tous les contrats sont vérifiés sur Sourcify.
-- **Testé de bout en bout.** 117 tests Foundry, 118 tests unitaires du workflow et 137 vérifications d'autotest de la
+- **Testé de bout en bout.** 117 tests Foundry, 118 tests unitaires du workflow et 199 vérifications d'autotest de la
   salle de crise tournent dans la [CI](.github/workflows/ci.yml) ; un script de bout en bout sur fork pilote la boucle
   complète à travers le simulateur CRE.
 
@@ -302,7 +302,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 tests : règles, sondes, bytecode, rapports, budgets, handlers
 
 # la salle de crise
-(cd web && npm ci && npm run selftest)            # 137 vérifications : vue en direct et relecture hors ligne
+(cd web && npm ci && npm run selftest)            # 199 vérifications : vue en direct et relecture hors ligne
 ```
 
 ### De bout en bout sur un fork de Sepolia

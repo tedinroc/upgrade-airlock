@@ -32,7 +32,7 @@ Upgrade Airlock 为每一次合约升级设置两道门。**外门**是按区块
 - **判决与提案绑定。** DON 就 `{verdict, rule}` 达成共识。报告附带一份 EIP-712 签名证明，绑定提案的确切内容（`proposalDigest`）、链、接收合约和截止区块，另附一个任何人都能用链上数据重新算出的证据哈希。
 - **没有提案会漏判。** cron 定时扫描每 60 秒检查最新的 20 个提案，补判 log trigger 漏掉的所有提案，包括 approver（审批人）手动放行的升级；它的否决优先。
 - **已在 Ethereum Sepolia 上线运行。** 官方 CRE CLI 在服务器上运行这个工作流，在链上对七个提案作出了判决：一次正常升级被放行并执行，六次攻击被否决（R1、R2、R3、R3B、R7、R9）。所有合约均已在 Sourcify 上完成验证。
-- **端到端测试。** [CI](.github/workflows/ci.yml) 中运行 117 个 Foundry 测试、118 个工作流单元测试和 137 项战情室自检；另有一个分叉链端到端脚本，通过 CRE 模拟器跑通完整闭环。
+- **端到端测试。** [CI](.github/workflows/ci.yml) 中运行 117 个 Foundry 测试、118 个工作流单元测试和 199 项战情室自检；另有一个分叉链端到端脚本，通过 CRE 模拟器跑通完整闭环。
 
 ## 要解决的问题
 
@@ -194,7 +194,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 个测试：规则、探测、字节码、报告、预算、handler
 
 # 战情室
-(cd web && npm ci && npm run selftest)            # 137 项检查：实时视图和离线回放
+(cd web && npm ci && npm run selftest)            # 199 项检查：实时视图和离线回放
 ```
 
 ### 在 Sepolia 分叉链上端到端运行

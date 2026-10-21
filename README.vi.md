@@ -56,7 +56,7 @@ ETH Shenzhen 2026 trên Ethereum Sepolia.
 - **Đang chạy thật trên Ethereum Sepolia.** CRE CLI chính thức đã chạy workflow trên một máy chủ và trả lời bảy đề
   xuất trên chuỗi: một bản nâng cấp trung thực được thông qua và thực thi, sáu cuộc tấn công bị phủ quyết (R1, R2, R3,
   R3B, R7, R9). Mọi hợp đồng đều được xác minh trên Sourcify.
-- **Kiểm thử end-to-end.** 117 bài test Foundry, 118 bài unit test cho workflow và 137 mục tự kiểm tra của war room
+- **Kiểm thử end-to-end.** 117 bài test Foundry, 118 bài unit test cho workflow và 199 mục tự kiểm tra của war room
   chạy trong [CI](.github/workflows/ci.yml); một script end-to-end trên fork chạy trọn vòng xử lý qua trình mô phỏng
   CRE.
 
@@ -296,7 +296,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 bài test: quy tắc, thăm dò, bytecode, báo cáo, ngân sách, handler
 
 # war room
-(cd web && npm ci && npm run selftest)            # 137 mục kiểm tra: chế độ xem trực tiếp và phát lại offline
+(cd web && npm ci && npm run selftest)            # 199 mục kiểm tra: chế độ xem trực tiếp và phát lại offline
 ```
 
 ### End-to-end trên fork Sepolia

@@ -54,7 +54,7 @@ chave de upgrade. Desenvolvido para o ETH Shenzhen 2026, na Ethereum Sepolia.
 - **Ao vivo na Ethereum Sepolia.** A CRE CLI oficial executou o workflow em um servidor e respondeu a sete propostas
   on-chain: um upgrade honesto liberado e executado, seis ataques vetados (R1, R2, R3, R3B, R7, R9). Todos os
   contratos estão verificados no Sourcify.
-- **Testado de ponta a ponta.** 117 testes Foundry, 118 testes unitários do workflow e 137 verificações de autoteste
+- **Testado de ponta a ponta.** 117 testes Foundry, 118 testes unitários do workflow e 199 verificações de autoteste
   da war room rodam na [CI](.github/workflows/ci.yml); um script de ponta a ponta em fork percorre o ciclo completo no
   simulador do CRE.
 
@@ -293,7 +293,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 testes: regras, sondas, bytecode, relatórios, orçamentos, handlers
 
 # a war room
-(cd web && npm ci && npm run selftest)            # 137 verificações: visão ao vivo e reprodução offline
+(cd web && npm ci && npm run selftest)            # 199 verificações: visão ao vivo e reprodução offline
 ```
 
 ### Ponta a ponta em um fork da Sepolia

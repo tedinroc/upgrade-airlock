@@ -56,7 +56,7 @@ actualización. Creado para ETH Shenzhen 2026 sobre Ethereum Sepolia.
 - **En vivo en Ethereum Sepolia.** La CLI oficial de CRE ejecutó el workflow en un servidor y respondió en la cadena a
   siete propuestas: una actualización honesta autorizada y ejecutada, y seis ataques vetados (R1, R2, R3, R3B, R7,
   R9). Todos los contratos están verificados en Sourcify.
-- **Probado de extremo a extremo.** 117 pruebas de Foundry, 118 pruebas unitarias del workflow y 137 comprobaciones
+- **Probado de extremo a extremo.** 117 pruebas de Foundry, 118 pruebas unitarias del workflow y 199 comprobaciones
   de autoprueba de la sala de control se ejecutan en [CI](.github/workflows/ci.yml); un script de extremo a extremo
   sobre un fork recorre el ciclo completo a través del simulador de CRE.
 
@@ -303,7 +303,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 pruebas: reglas, sondas, bytecode, informes, presupuestos, handlers
 
 # la sala de control
-(cd web && npm ci && npm run selftest)            # 137 comprobaciones: vista en vivo y reproducción sin conexión
+(cd web && npm ci && npm run selftest)            # 199 comprobaciones: vista en vivo y reproducción sin conexión
 ```
 
 ### De extremo a extremo sobre un fork de Sepolia
