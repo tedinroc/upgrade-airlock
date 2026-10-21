@@ -6,6 +6,8 @@
 //   ?mode=offline            plays back the recorded run in src/recorded-run.json; opens no network connection at all
 //   ?rpc=http://127.0.0.1:19621   airlock only: read this JSON-RPC instead (a local Sepolia fork; WS on the same port)
 //   ?lang=zh-CN | zh-TW | en
+//   ?p=<id>                  open on that proposal (offline: the replay loop starts with it)
+// Presenter keys: web/README.md and the on-screen help (?).
 
 export type AppMode = 'airlock' | 'offline'
 
@@ -50,8 +52,8 @@ export const CONFIG = {
   blockSec: 12,
   /** Cooldown shown before a deployment file exists (DeployEth.s.sol's default DELAY_BLOCKS) */
   delayBlocks: 25,
-  /** Recent proposals listed in the toolbar and loaded on page open */
-  recentProposals: 5,
+  /** Recent proposals shown as cards and loaded on page open */
+  recentProposals: 8,
   /** Sliding window (blocks) for the measured block time */
   blockTimeWindow: 60,
   /** A measured block time below this is a fast-mined fork, not a real s/block */
@@ -61,6 +63,9 @@ export const CONFIG = {
   replay: {
     /** Virtual clock speed: ms per block (a 25-block cooldown plays in about 15 s) */
     msPerBlock: 600,
+    /** The clock holds on a step this long, so the screen can play the moment: the arrival, the verdict landing,
+     *  the inner door opening */
+    dwellMs: { proposed: 1500, verdict: 3200, executed: 3000 },
     /** Live mode: replay starts only after this long without a live event */
     idleMs: 60000,
     /** Offline mode: after the viewer picks a proposal by hand, playback resumes after this long */

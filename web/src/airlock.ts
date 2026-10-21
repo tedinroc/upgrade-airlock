@@ -150,9 +150,15 @@ export function airlockView(
 /** Seconds -> "24 s", "4 min 36 s" (current language) */
 export function fmtDur(sec: number): string {
   const s = Math.max(0, Math.round(sec))
-  if (s < 60) return t('d.sec', { s })
-  if (s % 60 === 0) return t('d.minOnly', { m: s / 60 })
-  return t('d.min', { m: Math.floor(s / 60), s: s % 60 })
+  if (s < 60) return t('dur.sec', { s })
+  if (s % 60 === 0) return t('dur.minOnly', { m: s / 60 })
+  return t('dur.min', { m: Math.floor(s / 60), s: s % 60 })
+}
+
+/** Seconds -> "4:36" (a countdown clock; the same in every language) */
+export function fmtClock(sec: number): string {
+  const s = Math.max(0, Math.ceil(sec))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 /** Tab title follows the language */

@@ -7,6 +7,8 @@ export type Link = 'ws' | 'poll' | 'down' | 'offline'
 
 export class BlockStream {
   latest = 0
+  /** Date.now() when the latest header arrived (drives the per-second cooldown clock between blocks) */
+  lastAt = 0
   link: Link = 'down'
   linkUrl = ''
   private arrivals: { n: number; t: number }[] = []
@@ -29,6 +31,7 @@ export class BlockStream {
   ingest(n: number) {
     if (!Number.isFinite(n) || n <= 0 || n <= this.latest) return
     this.latest = n
+    this.lastAt = Date.now()
     this.arrivals.push({ n, t: performance.now() })
     if (this.arrivals.length > CONFIG.blockTimeWindow) this.arrivals.shift()
     this.emit()

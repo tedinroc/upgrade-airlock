@@ -51,6 +51,22 @@ export const CHAIN: ChainConfig = OFFLINE
   ? { ...CONFIG.sepolia, ws: [], http: [], explorerTx: null, explorerAddr: null, sourcifyApi: null }
   : chainWithRpc(CONFIG.sepolia, RPC_OVERRIDE)
 
+/** ?p=<id>: open on that proposal (a positive integer, else ignored) */
+export function parsePick(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim()
+  return /^[1-9]\d{0,8}$/.test(s) ? s : null
+}
+export const PICK = parsePick(params.get('p'))
+
+/** ?clean=1 (or a bare ?clean): recording mode. The presenter chrome (language switch, Details, ?, key hints) is not
+ *  drawn, so a recorded video shows only the product. ?clean=0 or no parameter: the normal page */
+export function parseClean(raw: string | null | undefined): boolean {
+  if (raw === null || raw === undefined) return false
+  const s = raw.trim().toLowerCase()
+  return s === '' || s === '1' || s === 'true' || s === 'yes'
+}
+export const CLEAN = parseClean(params.get('clean'))
+
 /** Guard cards in deployment order: guardians = [AirlockReceiver (Chainlink CRE), emergency guardian (human)] */
 export const GUARDS = ['cre', 'breakglass'] as const
 export type GuardId = (typeof GUARDS)[number]

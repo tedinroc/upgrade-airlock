@@ -41,6 +41,8 @@ export interface Proposal {
   id: string
   kind: string
   target: string
+  /** Proposed.value: the enabled flag of a guardian change (1 add, 0 remove), the new delay of a cooldown change */
+  value?: string
   codehash: string
   proposeBlock: number | null
   readyBlock: number | null
@@ -97,6 +99,10 @@ export class Store {
   verified = new Map<string, VerifyState>()
   /** tx hash (lowercase) -> receipt numbers of verdict and execute transactions */
   receipts = new Map<string, TxCost>()
+  /** Auto-follow (F): a live proposal takes over the screen as it arrives */
+  follow = true
+  /** The last proposal that arrived live (not from history): the screen plays its arrival */
+  arrival: { id: string; at: number } | null = null
   private listeners = new Set<() => void>()
 
   onChange(fn: () => void) {
@@ -122,6 +128,11 @@ export class Store {
   /** Newest first, at most CONFIG.recentProposals */
   recentIds(): string[] {
     return [...this.proposals.keys()].sort((a, b) => Number(b) - Number(a)).slice(0, CONFIG.recentProposals)
+  }
+
+  /** Highest proposal id, or null */
+  newestId(): string | null {
+    return this.recentIds()[0] ?? null
   }
 
   /** One line in the event stream: stores the template (re-rendered on a language switch) and the zh-CN text */

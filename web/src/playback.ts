@@ -1,5 +1,6 @@
 // The page's playback controller (replay.ts engine bound to the store): offline mode plays the recorded run in a loop
-// from page load; live mode stays on the newest proposal and plays recent ones only after P.
+// from page load; live mode stays on the real chain state and plays recent ones only after P. Space replays the
+// selected proposal once in either mode.
 import { blocks } from './chain'
 import { CONFIG } from './config'
 import { whoMsg } from './events'
@@ -41,9 +42,9 @@ function logStep(tl: Timeline, st: TLStep, src: Proposal) {
       break
     }
     case 'ready': {
+      // only cleared timelines have this step (an ejected one ends shortly after its veto)
       const cleared = tl.steps.some((x) => x.kind === 'clear' && x.block <= st.block)
-      const k = tl.type === 'ejected' ? 'rp.readyVetoed' : cleared ? 'rp.readyCleared' : 'rp.readyWaiting'
-      store.logT('chain', 'ready', msg(k, { id, b: st.block }), tl.type === 'ejected' ? 'bad' : cleared ? 'good' : 'warn', ts, true)
+      store.logT('chain', 'ready', msg(cleared ? 'rp.readyCleared' : 'rp.readyWaiting', { id, b: st.block }), cleared ? 'good' : 'warn', ts, true)
       break
     }
     case 'executed':
@@ -56,6 +57,7 @@ export const replay = new AutoReplay(
   Date.now(),
   {
     msPerBlock: CONFIG.replay.msPerBlock,
+    dwellMs: CONFIG.replay.dwellMs,
     firstDelayMs: OFFLINE ? 0 : CONFIG.replay.idleMs,
     idleMs: OFFLINE ? CONFIG.replay.offlineIdleMs : CONFIG.replay.idleMs,
     gapMs: CONFIG.replay.gapMs,
@@ -95,4 +97,13 @@ export function replayFrame(now = Date.now()): ReplayFrame | null {
 export function toggleReplay() {
   replay.toggle(Date.now())
   store.emit()
+}
+
+/** Space: replay one proposal's moment (arrival, verdict, and the inner door for an executed upgrade) */
+export function replayProposal(id: string | null): boolean {
+  const p = id ? store.proposals.get(id) : undefined
+  if (!p || !playbackGate.ready) return false
+  const ok = replay.playOne(Date.now(), p, reducedMotion())
+  store.emit()
+  return ok
 }

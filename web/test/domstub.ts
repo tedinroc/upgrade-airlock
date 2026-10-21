@@ -59,7 +59,11 @@ export function installDom() {
     doc,
     els,
     mem,
-    /** 目前所有区块的 innerHTML 串在一起（＝整个画面） */
-    html: () => [...els.values()].map((e) => e.innerHTML).join('\n'),
+    /** 目前所有区块的 innerHTML 串在一起（＝整个画面）；收起的详情抽屉与快捷键说明不算在画面上 */
+    html: () =>
+      [...els.values()]
+        .filter((e) => !['details', 'help'].includes(e.id) || e.classList.contains('open'))
+        .map((e) => e.innerHTML)
+        .join('\n'),
   }
 }

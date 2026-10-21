@@ -45,17 +45,6 @@ export const RULE_BY_HASH = new Map<string, RuleId>(RULE_IDS.map((r) => [ruleHas
 /** "R1_TOTAL_SUPPLY" -> "R1" */
 export const ruleShort = (rule: string): string => rule.split('_')[0]
 
-export function toNum(x: unknown): number | null {
-  if (x === null || x === undefined || x === '') return null
-  if (typeof x === 'number') return Number.isFinite(x) ? x : null
-  if (typeof x === 'bigint') return Number(x)
-  if (typeof x === 'string') {
-    const n = x.startsWith('0x') ? parseInt(x, 16) : Number(x)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
-
 export function toBig(x: unknown): bigint | null {
   try {
     if (x === null || x === undefined || x === '') return null

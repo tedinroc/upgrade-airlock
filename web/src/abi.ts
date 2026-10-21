@@ -23,6 +23,3 @@ export const RECEIVER_ABI = parseAbi([
 
 export const ACTION_VETO = 0
 export const ACTION_CLEAR = 1
-
-/** Proposal.status */
-export const STATUS = { None: 0, Pending: 1, Vetoed: 2, Executed: 3 } as const

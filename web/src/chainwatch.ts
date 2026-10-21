@@ -58,6 +58,7 @@ interface ChainProposal {
   status: number
   proposer: string
   target: string
+  value: bigint
   codehash: string
   proposedBlock: bigint
   readyBlock: bigint
@@ -106,6 +107,7 @@ function applyProposal(id: string, cp: ChainProposal, clearance: string | null) 
   const p = store.ensure(id)
   p.kind = String(cp.kind)
   p.target = cp.target
+  p.value = String(cp.value)
   p.codehash = cp.codehash
   p.proposeBlock = Number(cp.proposedBlock)
   p.readyBlock = Number(cp.readyBlock)

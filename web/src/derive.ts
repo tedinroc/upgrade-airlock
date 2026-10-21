@@ -40,9 +40,10 @@ export function plausibleBlockMs(bt: number | null, minMs: number): number | nul
   return bt !== null && bt >= minMs ? bt : null
 }
 
-/** Font size of the big block counter: longer numbers get smaller so they never overflow the top-right box */
-export function blockFontPx(text: string, widthPx: number, maxPx: number): number {
-  const n = Math.max(1, text.length)
-  // monospace digits are about 0.6em wide, plus 4% margin; letter-spacing -0.02em included
-  return Math.max(28, Math.min(maxPx, Math.floor(widthPx / (n * 0.6 * 1.04 - n * 0.02))))
+/** The workflow id carried by a Verdict, or null when it is not a real one: the CRE CLI simulator writes a
+ *  placeholder (0x1111…1111), and a zero or repeated-digit id says nothing about which workflow ran */
+export function realWorkflowId(w: string | null | undefined): string | null {
+  if (!w || !/^0x[0-9a-fA-F]{64}$/.test(w)) return null
+  if (/^0x([0-9a-fA-F])\1{63}$/.test(w)) return null
+  return w
 }

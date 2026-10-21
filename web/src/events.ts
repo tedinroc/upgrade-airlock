@@ -100,6 +100,7 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
     case 'Proposed': {
       p.kind = String(ev.args.kind)
       p.target = String(ev.args.target)
+      p.value = String(ev.args.value)
       p.codehash = String(ev.args.codehash)
       p.proposeBlock = block
       p.readyBlock = Number(ev.args.readyBlock)
@@ -107,8 +108,12 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
       p.dropped = false
       recognise(p)
       if (live) {
-        manualPick = false
-        store.activeId = id
+        store.arrival = { id, at: ts }
+        // auto-follow: the new proposal takes over the screen (F turns it off)
+        if (store.follow) {
+          manualPick = false
+          store.activeId = id
+        }
       }
       store.logT('chain', 'Proposed', msg('ev.proposed', { id, b: block, rb: p.readyBlock, tx: short(tx) }), 'info', ts)
       break
@@ -184,7 +189,7 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
   return id
 }
 
-/** The viewer picked a proposal: stay on it until a new proposal arrives */
+/** The viewer picked a proposal: stay on it (until a new proposal arrives, when auto-follow is on) */
 let manualPick = false
 export function setManualPick(on: boolean) {
   manualPick = on
