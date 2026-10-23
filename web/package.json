@@ -7,11 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc",
-    "selftest": "rolldown -c test/rolldown.config.mjs && node node_modules/.cache/airlock-selftest.mjs && node node_modules/.cache/offline-selftest.mjs",
+    "typecheck": "tsc && tsc -p functions",
+    "selftest": "rolldown -c test/rolldown.config.mjs && node node_modules/.cache/airlock-selftest.mjs && node node_modules/.cache/offline-selftest.mjs && node node_modules/.cache/operator-selftest.mjs",
     "sync:sepolia": "node scripts/sync-sepolia-data.mjs",
     "record:run": "node scripts/record-run.mjs",
-    "build:airlock": "node scripts/sync-sepolia-data.mjs && tsc && vite build --outDir dist-airlock"
+    "build:airlock": "node scripts/sync-sepolia-data.mjs && tsc && tsc -p functions && vite build --outDir dist-airlock"
   },
   "dependencies": {
     "viem": "2.57.2"

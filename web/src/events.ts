@@ -183,6 +183,12 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
       break
     }
   }
+  // a live event about the newest proposal (its verdict, its execution) stopped any replay on screen: with auto-follow
+  // on, that proposal takes the screen, as its arrival did, instead of the replayed one's final state
+  if (live && store.follow && ev.eventName !== 'Proposed' && id === store.newestId() && store.activeId !== id) {
+    manualPick = false
+    store.activeId = id
+  }
   pickActive()
   store.emit()
   hooks.refresh(id)

@@ -10,9 +10,11 @@
 //   D                 details drawer
 //   L                 language
 //   ? / H             help
-//   Esc               close the drawer and the help
+//   1 - 7             replay attack card 1-7 of the picker (lab.ts), also with ?clean=1 where the picker is hidden
+//   O                 the operator's launch panel (only where operator mode is on; operator-client.ts)
+//   Esc               close the drawer, the help and the operator panel
 
-export type Action = 'prev' | 'next' | 'newest' | 'replay' | 'follow' | 'loop' | 'details' | 'lang' | 'help' | 'close'
+export type Action = 'prev' | 'next' | 'newest' | 'replay' | 'follow' | 'loop' | 'details' | 'lang' | 'help' | 'lab' | 'operator' | 'close'
 
 const KEYS: Record<string, Action> = {
   arrowleft: 'prev',
@@ -31,7 +33,20 @@ const KEYS: Record<string, Action> = {
   l: 'lang',
   '?': 'help',
   h: 'help',
+  '1': 'lab',
+  '2': 'lab',
+  '3': 'lab',
+  '4': 'lab',
+  '5': 'lab',
+  '6': 'lab',
+  '7': 'lab',
+  o: 'operator',
   escape: 'close',
+}
+
+/** Keys 1-7: the picker card's index (0-6), else null */
+export function labIndexOfKey(key: string): number | null {
+  return /^[1-7]$/.test(key) ? Number(key) - 1 : null
 }
 
 /** KeyboardEvent.key -> action; null for keys the page leaves alone (and for any key with Ctrl, Alt or Meta held) */
@@ -50,6 +65,8 @@ export const HELP_ROWS: { keys: string[]; action: Action }[] = [
   { keys: ['D'], action: 'details' },
   { keys: ['L'], action: 'lang' },
   { keys: ['?'], action: 'help' },
+  { keys: ['1–7'], action: 'lab' },
+  { keys: ['O'], action: 'operator' },
   { keys: ['Esc'], action: 'close' },
 ]
 

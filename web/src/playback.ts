@@ -9,8 +9,11 @@ import { AutoReplay, type ReplayFrame, type Timeline, type TLStep } from './repl
 import { OFFLINE } from './runtime'
 import { short, store, type Proposal } from './store'
 
-/** live mode: page loaded and the recent proposals are in (set by chainwatch / offline loaders) */
-export const playbackGate = { ready: false }
+/** live mode: page loaded and the recent proposals are in (set by chainwatch / offline loaders). loaded: the proposals
+ *  whose history (logs) is already in, so each one can replay before all the others are read. */
+export const playbackGate = { ready: false, loaded: new Set<string>(), startedAt: 0 }
+/** This proposal's history is in: it can be replayed */
+export const historyIn = (id: string): boolean => playbackGate.ready || playbackGate.loaded.has(id)
 
 function logStep(tl: Timeline, st: TLStep, src: Proposal) {
   const id = tl.id
@@ -77,7 +80,7 @@ const reducedMotion = () => {
 }
 
 /** live mode: the newest proposal is still in its cooldown */
-function liveBusy(): boolean {
+export function liveBusy(): boolean {
   if (OFFLINE) return false
   let newest: Proposal | null = null
   for (const p of store.proposals.values()) if (!newest || Number(p.id) > Number(newest.id)) newest = p
@@ -86,7 +89,8 @@ function liveBusy(): boolean {
 
 /** Called every frame; returns whether the page must redraw */
 export function tickReplay(now = Date.now()): boolean {
-  if (!playbackGate.ready) return false
+  // the loop waits for every recent proposal; a single replay (a picker card, Space) only needs its own history
+  if (!playbackGate.ready && !replay.onDemand) return false
   return replay.tick(now, { proposals: store.proposals.values(), get: (id) => store.proposals.get(id), reduced: reducedMotion(), liveBusy: liveBusy() })
 }
 
@@ -94,16 +98,23 @@ export function replayFrame(now = Date.now()): ReplayFrame | null {
   return replay.frame(now, (id) => store.proposals.get(id))
 }
 
+/** A replay between its proposal's arrival and its verdict (0..1); null when nothing plays */
+export function judgeProgress(now = Date.now()): number | null {
+  return replay.judgeProgress(now)
+}
+
 export function toggleReplay() {
   replay.toggle(Date.now())
   store.emit()
 }
 
-/** Space: replay one proposal's moment (arrival, verdict, and the inner door for an executed upgrade) */
+/** Space: replay one proposal's moment (arrival, verdict, and the inner door for an executed upgrade). The attack
+ *  picker (lab.ts) calls replay.playOne itself, with its own timing. */
 export function replayProposal(id: string | null): boolean {
   const p = id ? store.proposals.get(id) : undefined
-  if (!p || !playbackGate.ready) return false
-  const ok = replay.playOne(Date.now(), p, reducedMotion())
+  if (!p || !historyIn(p.id)) return false
+  // an explicit replay request plays the stages even with prefers-reduced-motion (style.css tones the motion down)
+  const ok = replay.playOne(Date.now(), p, false)
   store.emit()
   return ok
 }

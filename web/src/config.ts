@@ -17,6 +17,8 @@ export interface ChainConfig {
   ws: string[]
   /** HTTP JSON-RPC endpoints, rotated on failure */
   http: string[]
+  /** HTTP endpoints for history (eth_getLogs of past proposals), tried in this order first; rotated on failure */
+  historyHttp: string[]
   /** Explorer prefixes; null on a local fork (its hashes are not on the real chain) */
   explorerTx: string | null
   explorerAddr: string | null
@@ -40,6 +42,9 @@ export const CONFIG = {
     chainId: 11155111,
     ws: ['wss://ethereum-sepolia-rpc.publicnode.com', 'wss://sepolia.drpc.org'],
     http: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org', 'https://1rpc.io/sepolia'],
+    /** publicnode answers eth_getLogs older than about a day with "pruned history unavailable" (checked 2026-10-22),
+     *  so the proposals' history is read from drpc first; publicnode stays as the fallback */
+    historyHttp: ['https://sepolia.drpc.org', 'https://ethereum-sepolia-rpc.publicnode.com'],
     explorerTx: 'https://sepolia.etherscan.io/tx/',
     explorerAddr: 'https://sepolia.etherscan.io/address/',
     sourcifyApi: 'https://sourcify.dev/server/v2/contract/11155111/',
@@ -54,6 +59,9 @@ export const CONFIG = {
   delayBlocks: 25,
   /** Recent proposals shown as cards and loaded on page open */
   recentProposals: 8,
+  /** Attack picker: when a card's newest judged proposal is older than the recent ones, read at most this many older
+   *  proposal ids (getProposal only, newest first) to find it (chainwatch.ts backfillLab) */
+  labScanMax: 40,
   /** Sliding window (blocks) for the measured block time */
   blockTimeWindow: 60,
   /** A measured block time below this is a fast-mined fork, not a real s/block */

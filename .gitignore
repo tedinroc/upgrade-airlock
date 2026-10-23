@@ -18,6 +18,8 @@ dist/
 *.key
 keystore/
 .dev.vars*
+# wrangler's local scratch (bundles with absolute local paths)
+.wrangler/
 
 # OS / editor
 .DS_Store

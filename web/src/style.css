@@ -108,6 +108,7 @@ kbd {
   padding: 26px 44px 30px;
   display: grid;
   grid-template-rows: 64px minmax(0, 1fr) 196px;
+  grid-template-areas: 'bar' 'main' 'dock';
   gap: 22px;
   overflow: hidden;
   background:
@@ -118,6 +119,7 @@ kbd {
 
 /* ---------- top bar ---------- */
 .bar {
+  grid-area: bar;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -298,6 +300,7 @@ kbd {
 
 /* ---------- main row ---------- */
 .main {
+  grid-area: main;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 600px;
   gap: 22px;
@@ -351,6 +354,18 @@ kbd {
 .tag.warn {
   background: var(--warn-soft);
   color: var(--warn);
+}
+/* a past proposal's real state on chain, dated */
+.tag.state {
+  color: var(--dim);
+  border: 1px solid var(--line-2);
+  letter-spacing: 0.04em;
+}
+.h-off {
+  color: var(--accent-hi);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .h-title {
   margin: 6px 0 0;
@@ -765,6 +780,29 @@ kbd {
   background: var(--good-soft);
   color: var(--good-hi);
 }
+/* a replay: the CRE workflow step the verdict card is on, and the fast-forwarded cooldown */
+.cn-tag.step .spin {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+.cn-tag.ff {
+  background: var(--accent-soft);
+  color: var(--accent-hi);
+  border: 1px solid rgba(138, 163, 255, 0.35);
+}
+.nw {
+  white-space: nowrap;
+}
+.cn-tag.step span {
+  text-wrap: balance;
+}
+.cn-rp {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
 .cn-word {
   display: flex;
   align-items: center;
@@ -808,6 +846,33 @@ kbd {
   font-size: 20px;
   color: var(--dim);
   margin-top: 6px;
+}
+/* the operator's launch on its way: its transaction under the waiting line */
+.cn-tx {
+  margin-top: 12px;
+  font-size: 18px;
+}
+/* first-visit intro and a replay's lead-in: one calm line in the empty chamber */
+.cn-sub.intro,
+.cn-sub.arriving {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent-hi);
+}
+.cn-sub.arriving {
+  animation: pulse-text 1.4s ease-in-out infinite;
+}
+@keyframes pulse-text {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 /* the clearance's stamp: green, upright, on its own layer over the countdown for a moment (ui.ts h-stamp) */
 .stampbox {
@@ -1002,6 +1067,9 @@ kbd {
   font-weight: 750;
   letter-spacing: 0.01em;
 }
+.v-head .v-rp {
+  margin-left: auto;
+}
 .vm {
   display: flex;
   flex-direction: column;
@@ -1176,6 +1244,37 @@ kbd {
 .pipe.st-off {
   opacity: 0.45;
 }
+/* a replay walks through the steps until its verdict lands: done ones filled, the current one spinning, the rest dim */
+.pipe.st-run.seq .pi-dot {
+  animation: none;
+}
+.pipe.seq li {
+  transition: opacity 0.35s ease, background-color 0.35s ease;
+}
+.pipe.seq li.ok .pi-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.pipe.seq li.ok + li::before,
+.pipe.seq li.cur::before {
+  border-color: var(--accent);
+}
+.pipe.seq li.cur {
+  background: rgba(55, 91, 210, 0.16);
+}
+.pipe.seq li.cur .pi-dot {
+  border-color: var(--accent-hi);
+  box-shadow: 0 0 0 6px rgba(138, 163, 255, 0.14);
+}
+.pipe.seq li.cur .pi-dot .spin {
+  width: 18px;
+  height: 18px;
+  border-width: 2.5px;
+}
+.pipe.seq li.next {
+  opacity: 0.45;
+}
 
 .v-links {
   margin-top: auto;
@@ -1229,6 +1328,7 @@ kbd {
 
 /* ---------- strip ---------- */
 .strip {
+  grid-area: dock;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1425,6 +1525,651 @@ kbd {
   gap: 5px;
   background: var(--accent-soft);
   color: var(--accent-hi);
+}
+
+/* ---------- attack picker (lab-ui.ts): the bottom row of the stage, or under the top bar on a phone ---------- */
+.lab {
+  grid-area: dock;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.no-lab .lab {
+  display: none;
+}
+.lab-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 34px;
+}
+.lab-t {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.lab-t h3 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 770;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+.lab-t h3.invite {
+  color: var(--accent-hi);
+}
+.lab-sub {
+  min-width: 0;
+  font-size: 16px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lab-head.playing .lab-sub {
+  display: none;
+}
+.lab-now {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+.lab-now .tag {
+  font-size: 14px;
+}
+.lab-tx {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--faint);
+}
+.lab-tx .mono {
+  font-size: 16px;
+}
+.tabs {
+  flex: none;
+  margin-left: auto;
+}
+.lab-now + .tabs,
+.s-hint + .tabs {
+  margin-left: 0;
+}
+.lab-cards {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px;
+}
+.lc {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  transition:
+    transform 0.2s,
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.lc::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: -1px;
+  height: 3px;
+  border-radius: 0 0 4px 4px;
+  background: var(--bad);
+}
+.lc.k-clear::before {
+  background: var(--good);
+}
+.lc:hover {
+  border-color: var(--line-2);
+  transform: translateY(-2px);
+}
+.lc.on {
+  border-color: var(--accent-hi);
+  background: linear-gradient(180deg, rgba(55, 91, 210, 0.3), rgba(55, 91, 210, 0.08));
+  box-shadow:
+    inset 0 0 0 1px var(--accent-hi),
+    0 14px 34px rgba(55, 91, 210, 0.3);
+}
+.lc.live {
+  border-color: rgba(138, 163, 255, 0.55);
+}
+.lc.none {
+  opacity: 0.55;
+}
+.lc.none:hover {
+  transform: none;
+}
+.lc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px 13px;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+.lc-main:disabled {
+  cursor: default;
+}
+.lc-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 25px;
+}
+.lc.has-op .lc-top {
+  padding-right: 36px;
+}
+.lc-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.lc-code.veto {
+  background: var(--bad-soft);
+  color: var(--bad-hi);
+}
+.lc-code.clear {
+  font-family: var(--sans);
+  font-size: 14px;
+  background: var(--good-soft);
+  color: var(--good-hi);
+}
+.lc-ref {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--faint);
+}
+.lc-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  background: var(--accent-soft);
+  color: var(--accent-hi);
+}
+.lc-live .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  color: var(--accent-hi);
+  background: currentColor;
+  animation: beacon 2s ease-out infinite;
+}
+.lc-name {
+  font-size: 22px;
+  font-weight: 760;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-line {
+  font-size: 15px;
+  line-height: 1.32;
+  color: var(--dim);
+  text-wrap: pretty;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.lc-foot {
+  margin-top: auto;
+  min-height: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.lc-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent-hi);
+}
+.lc-cta .ic {
+  font-size: 14px;
+}
+.lc-cta.dim {
+  font-weight: 500;
+  color: var(--faint);
+}
+.lc-prog {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(138, 163, 255, 0.16);
+  overflow: hidden;
+}
+.lc-prog i {
+  display: block;
+  height: 100%;
+  background: var(--accent-hi);
+  transform-origin: 0 50%;
+  transform: scaleX(var(--lab-f, 0));
+}
+.lc-stage {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.lc-stage > span:not(.lc-steps) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-stage .ic {
+  flex: none;
+  font-size: 14px;
+  color: var(--accent-hi);
+}
+.lc-stage .spin {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border-width: 2px;
+}
+.lc-stage.st-veto .ic {
+  color: var(--bad-hi);
+}
+.lc-stage.st-clear .ic,
+.lc-stage.st-exec .ic {
+  color: var(--good-hi);
+}
+.lc-steps {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.lc-steps i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-2);
+}
+.lc-steps i.done {
+  background: var(--accent-hi);
+}
+.lc-steps i.cur {
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(138, 163, 255, 0.35);
+}
+/* the operator's launch button on a card (operator mode only) */
+.lc-op {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 9px;
+  font-size: 16px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid rgba(245, 185, 66, 0.4);
+  cursor: pointer;
+}
+.lc-op span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.lc-op:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* after the first-visit replay: the other cards glow twice, one after another, to invite a pick */
+.lc.nudge {
+  animation: nudge 1.4s ease-in-out calc(400ms + var(--i) * 110ms) 2 both;
+}
+@keyframes nudge {
+  0%,
+  100% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+  50% {
+    border-color: rgba(138, 163, 255, 0.7);
+    box-shadow: 0 0 0 4px rgba(138, 163, 255, 0.16);
+  }
+}
+
+/* the hero's "live" tag: a proposal happening on chain now, never a replay */
+.tag.live {
+  background: var(--accent-soft);
+  color: #e3e9ff;
+  border: 1px solid rgba(138, 163, 255, 0.55);
+}
+.tag.live .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  color: var(--accent-hi);
+  background: currentColor;
+  animation: beacon 2s ease-out infinite;
+}
+
+/* ---------- operator mode (lab-ui.ts): launch panel, status toast, token prompt ---------- */
+.btn.opb {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  color: var(--warn);
+  border-color: rgba(245, 185, 66, 0.45);
+}
+.btn.opb.on,
+.btn.opb:hover {
+  color: #ffd27a;
+  border-color: var(--warn);
+}
+.op {
+  position: absolute;
+  inset: 0;
+  z-index: 32;
+  display: grid;
+  /* one column as wide as the screen, so the card's max-width holds on a phone too */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  background: rgba(3, 5, 10, 0.72);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.2s,
+    visibility 0s linear 0.2s;
+}
+.op.open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s;
+}
+.op-card {
+  width: 1000px;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 60px);
+  overflow: auto;
+  padding: 30px 36px 24px;
+  border-radius: 26px;
+  background: #0d1426;
+  border: 1px solid var(--line-2);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.op-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.op-head h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 28px;
+}
+.op-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.op-note {
+  margin: 12px 0 18px;
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+.op-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 17px;
+  border: 1px solid var(--line-2);
+  background: #0d1426;
+}
+.op-status b {
+  white-space: nowrap;
+}
+.op-status > .ic {
+  flex: none;
+  font-size: 19px;
+}
+.op-status .spin {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+.op-status.run {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), #0d1426;
+  border-color: rgba(138, 163, 255, 0.45);
+}
+.op-status.good {
+  background: linear-gradient(var(--good-soft), var(--good-soft)), #0d1426;
+  border-color: rgba(47, 211, 142, 0.45);
+}
+.op-status.good > .ic {
+  color: var(--good-hi);
+}
+.op-status.bad {
+  background: linear-gradient(var(--bad-soft), var(--bad-soft)), #0d1426;
+  border-color: rgba(255, 77, 94, 0.45);
+}
+.op-status.bad > .ic {
+  color: var(--bad-hi);
+}
+.op-status.warn {
+  background: linear-gradient(var(--warn-soft), var(--warn-soft)), #0d1426;
+  border-color: rgba(245, 185, 66, 0.45);
+}
+.op-status.warn > .ic {
+  color: var(--warn);
+}
+.op-tx {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.op-list {
+  display: grid;
+  gap: 10px;
+}
+.op-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 12px 14px 12px 16px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.op-row.ask {
+  border-color: rgba(245, 185, 66, 0.6);
+  background: linear-gradient(180deg, rgba(245, 185, 66, 0.09), rgba(245, 185, 66, 0.03)), var(--panel);
+}
+.op-what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.op-what b {
+  font-size: 19px;
+}
+.op-what small {
+  font-size: 14px;
+  color: var(--faint);
+}
+.op-ask {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+.op-ask p {
+  flex: 1;
+  min-width: 260px;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+.op-ask p b {
+  color: var(--fg);
+}
+.op-btns {
+  display: flex;
+  gap: 10px;
+}
+.btn.go,
+.btn.danger,
+.btn.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 750;
+}
+.btn.go {
+  color: var(--warn);
+  border-color: rgba(245, 185, 66, 0.45);
+}
+.btn.go:hover {
+  color: #ffd27a;
+  border-color: var(--warn);
+}
+.btn.danger {
+  color: #241600;
+  background: var(--warn);
+  border-color: var(--warn);
+}
+.btn.primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.op-foot {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--faint);
+}
+.lnkbtn {
+  padding: 0;
+  font-size: 14px;
+  color: var(--accent-hi);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.op-tok {
+  width: 540px;
+}
+.op-tok h3 {
+  margin: 0;
+  font-size: 26px;
+}
+.op-input {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 17px;
+  color: var(--fg);
+  background: #060a15;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+}
+.op-bad {
+  margin: -4px 0 12px;
+  font-size: 15px;
+  color: var(--bad-hi);
+}
+.op-toast {
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  z-index: 26;
+  max-width: 1200px;
+  transform: translateX(-50%);
+}
+.op-toast:empty {
+  display: none;
+}
+.op-toast .op-status {
+  margin: 0;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.op-x {
+  display: inline-grid;
+  place-items: center;
+  margin-left: 4px;
+  padding: 4px;
+  font-size: 16px;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
 /* ---------- details drawer ---------- */
@@ -2099,6 +2844,10 @@ kbd {
     width: 8px;
     height: 8px;
   }
+  /* a replay's pill is long: the block number would drop to its own line and push the page down at every switch */
+  .pill.replay + .blk {
+    display: none;
+  }
   .blk {
     font-size: 12px;
   }
@@ -2142,6 +2891,25 @@ kbd {
   .tag {
     font-size: 11px;
     padding: 2px 8px;
+  }
+  /* a long replay tag wraps as one line of text inside the card (the date as a unit), not as two flex columns */
+  .h-eyebrow .tag {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.45;
+  }
+  .h-eyebrow .tag .ic {
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+  .h-eyebrow .tag .dot {
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: 0;
+  }
+  .cn-rp {
+    font-size: 10.5px;
   }
   .h-title {
     font-size: 30px;
@@ -2289,6 +3057,21 @@ kbd {
     font-size: 12px;
     margin-top: 2px;
   }
+  .cn-sub.intro,
+  .cn-sub.arriving {
+    gap: 8px;
+    font-size: 14px;
+    text-align: center;
+  }
+  .cn-tx {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .cn-sub.intro .spin {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+  }
   /* the three doors as rows: key on the left, the caption's phrases one per line on the right */
   .doors {
     grid-template-columns: minmax(0, 1fr);
@@ -2398,6 +3181,14 @@ kbd {
     width: 22px;
     height: 22px;
     font-size: 12px;
+  }
+  .pipe.seq li.cur .pi-dot .spin {
+    width: 12px;
+    height: 12px;
+    border-width: 2px;
+  }
+  .pipe.seq li.cur .pi-dot {
+    box-shadow: 0 0 0 4px rgba(138, 163, 255, 0.14);
   }
   .pi-t b {
     font-size: 15px;
@@ -2525,6 +3316,214 @@ kbd {
   .hp-foot {
     font-size: 12px;
   }
+  /* the attack picker right under the top bar: a row of cards to swipe, the next one peeking in at the edge */
+  .lab {
+    gap: 8px;
+  }
+  .lab-head {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    min-height: 0;
+  }
+  .lab-t {
+    flex: 1 1 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .lab-t h3 {
+    font-size: 17px;
+    white-space: normal;
+    text-wrap: balance;
+  }
+  .lab-sub {
+    font-size: 12.5px;
+    white-space: normal;
+  }
+  .lab-now {
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    white-space: normal;
+  }
+  .lab-now .tag {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+  .lab-tx {
+    font-size: 12px;
+  }
+  .lab-tx .mono {
+    font-size: 12.5px;
+  }
+  .tabs {
+    display: none;
+  }
+  .lab-cards {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 170px;
+    gap: 8px;
+    margin: 0 -16px;
+    padding: 3px 16px 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 16px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
+  }
+  .lab-cards::-webkit-scrollbar {
+    display: none;
+  }
+  .lc {
+    border-radius: 14px;
+    scroll-snap-align: start;
+  }
+  .lc:hover {
+    transform: none;
+  }
+  .lc::before {
+    left: 12px;
+    right: 12px;
+  }
+  .lc-main {
+    gap: 3px;
+    padding: 10px 11px;
+  }
+  .lc-top {
+    min-height: 20px;
+  }
+  .lc.has-op .lc-top {
+    padding-right: 28px;
+  }
+  .lc-code {
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .lc-code.clear {
+    font-size: 11.5px;
+  }
+  .lc-ref {
+    font-size: 12px;
+  }
+  .lc-live {
+    padding: 1px 7px;
+    font-size: 10px;
+  }
+  .lc-name {
+    font-size: 16px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-wrap: balance;
+  }
+  .lc-line {
+    font-size: 12.5px;
+    line-height: 1.3;
+    -webkit-line-clamp: 3;
+  }
+  .lc-foot {
+    min-height: 18px;
+    gap: 5px;
+  }
+  .lc-cta,
+  .lc-stage {
+    font-size: 12.5px;
+  }
+  .lc-stage {
+    white-space: normal;
+    line-height: 1.25;
+  }
+  .lc-stage > span:not(.lc-steps) {
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .lc-steps {
+    display: none;
+  }
+  .lc-op {
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    font-size: 13px;
+  }
+  .btn.opb .opb-t {
+    display: none;
+  }
+  .op {
+    position: fixed;
+  }
+  .op-card {
+    max-height: calc(100% - 24px);
+    padding: 20px 16px 16px;
+    border-radius: 20px;
+  }
+  .op-head {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .op-head h3 {
+    flex: 1 1 100%;
+    order: 3;
+    font-size: 19px;
+  }
+  .op-head .btn {
+    margin-left: auto;
+  }
+  .op-note {
+    font-size: 14px;
+  }
+  .op-status {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .op-row {
+    gap: 10px;
+    padding: 11px 12px;
+  }
+  .op-what b {
+    font-size: 16px;
+  }
+  .op-what small {
+    flex-basis: 100%;
+    font-size: 12px;
+  }
+  .op-row > .btn.go {
+    width: 100%;
+  }
+  .op-ask p {
+    flex-basis: 100%;
+    min-width: 0;
+    font-size: 14px;
+  }
+  .op-ask .op-btns {
+    width: 100%;
+  }
+  .op-ask .op-btns .btn {
+    flex: 1;
+  }
+  .op-foot {
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .op-tok {
+    width: auto;
+  }
+  .op-toast {
+    position: fixed;
+    top: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 12px;
+    right: 12px;
+    max-width: none;
+    transform: none;
+  }
 }
 /* stack mode with room to spare (a tablet in portrait, a narrow desktop window) */
 @media not all and (min-width: 960px) and (min-aspect-ratio: 5/4) {
@@ -2584,13 +3583,24 @@ kbd {
     .s-cards {
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
+    .lab-cards {
+      grid-auto-columns: 184px;
+    }
+  }
+}
+/* stage screens: the bottom row holds the attack picker or the strip of recent proposals (the tabs); with ?clean=1
+   there is no picker and the strip is always there. A phone shows both, one above and one below the airlock. */
+@media (min-width: 960px) and (min-aspect-ratio: 5/4) {
+  .stage:not(.no-lab):not(.tab-recent) .strip,
+  .stage.tab-recent .lab {
+    display: none;
   }
 }
 
 /* ---------- presenter chrome ---------- */
 /* Chinese text breaks at spaces and punctuation, not inside a word; anywhere only if a run cannot fit at all */
-:root:lang(zh-CN) :is(.h-desc, .v-rule, .bn-t, .dl-v, .pc-line),
-:root:lang(zh-TW) :is(.h-desc, .v-rule, .bn-t, .dl-v, .pc-line) {
+:root:lang(zh-CN) :is(.h-desc, .v-rule, .bn-t, .dl-v, .pc-line, .lc-line, .op-note, .op-ask p),
+:root:lang(zh-TW) :is(.h-desc, .v-rule, .bn-t, .dl-v, .pc-line, .lc-line, .op-note, .op-ask p) {
   word-break: keep-all;
   overflow-wrap: anywhere;
 }

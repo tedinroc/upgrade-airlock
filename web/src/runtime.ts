@@ -28,12 +28,13 @@ export function isLoopback(url: string): boolean {
 /** Chain settings with an optional ?rpc= override: only that endpoint is used (WS on the same host and port, as
  *  anvil serves both). A local fork has no explorer and no Sourcify (its addresses and hashes are not on Sepolia). */
 export function chainWithRpc(base: ChainConfig, rpc: string | null): ChainConfig {
-  if (!rpc) return { ...base, ws: [...base.ws], http: [...base.http] }
+  if (!rpc) return { ...base, ws: [...base.ws], http: [...base.http], historyHttp: [...base.historyHttp] }
   const local = isLoopback(rpc)
   return {
     ...base,
     ws: [rpc.replace(/^http/i, 'ws')],
     http: [rpc],
+    historyHttp: [rpc],
     explorerTx: local ? null : base.explorerTx,
     explorerAddr: local ? null : base.explorerAddr,
     sourcifyApi: local ? null : base.sourcifyApi,
@@ -48,7 +49,7 @@ export const FORK = RPC_OVERRIDE !== null && isLoopback(RPC_OVERRIDE)
 
 /** Offline mode has no endpoints and no outbound links at all, so nothing can open a connection by accident */
 export const CHAIN: ChainConfig = OFFLINE
-  ? { ...CONFIG.sepolia, ws: [], http: [], explorerTx: null, explorerAddr: null, sourcifyApi: null }
+  ? { ...CONFIG.sepolia, ws: [], http: [], historyHttp: [], explorerTx: null, explorerAddr: null, sourcifyApi: null }
   : chainWithRpc(CONFIG.sepolia, RPC_OVERRIDE)
 
 /** ?p=<id>: open on that proposal (a positive integer, else ignored) */

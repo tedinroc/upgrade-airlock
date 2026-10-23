@@ -1,0 +1,22 @@
+{
+  // Type-checks the Cloudflare Pages Functions and the operator module they share with the dev server
+  // (npm run typecheck runs it after the app's own tsconfig). Workers globals come from the WebWorker lib.
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "lib": ["ES2023", "WebWorker"],
+    "types": [],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["./**/*.ts", "../operator/**/*.ts"]
+}

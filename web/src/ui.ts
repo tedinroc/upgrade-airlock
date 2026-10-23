@@ -7,6 +7,9 @@
 //   verdict   the Chainlink CRE verdict: the pipeline, the rule in plain words, blocks and seconds after the proposal,
 //             links to the proposal tx, the report tx and the evidence hash
 //   strip     recent proposals as cards (click, or the arrow keys, to select)
+//   lab       the attack picker (lab.ts, drawn by lab-ui.ts): seven cards, each replays a real Sepolia proposal of
+//             that attack from its arrival; on a stage screen it shares the bottom row with the strip (two tabs)
+//   op        operator mode only (operator-client.ts): launch panel, status toast, token prompt
 //   details   developer drawer (D): every hash, gas cost, connection, event stream; hidden by default
 //   help      presenter shortcuts (?)
 //
@@ -22,21 +25,23 @@ import { DATA, PENDING, RECORDING } from './chaindata'
 import { chainHealth } from './chainwatch'
 import { CONFIG } from './config'
 import { HELP_ROWS, type Action } from './controls'
-import { explorerUrl, fmtEth, fmtGasPrice, plausibleBlockMs, realWorkflowId, txCost } from './derive'
+import { fmtEth, fmtGasPrice, plausibleBlockMs, realWorkflowId, txCost } from './derive'
 import { blockTs } from './events'
-import { cardDesc, kindText, lang, LANG_LABEL, LANGS, onLangChange, ruleShortText, ruleText, setLang, t, tm, type Key } from './i18n'
-import { replay, replayFrame } from './playback'
+import { cardDesc, kindText, labLine, labName, lang, LANG_LABEL, LANGS, onLangChange, ruleShortText, ruleText, setLang, t, tm, type Key } from './i18n'
+import { introSlow, isLiveNow, LAB_CARDS, LAB_PLAY, labIntro, labPlaying } from './lab'
+import { dayOf, opBarButton, renderLab, renderOperator, replayLabel, tabsHtml } from './lab-ui'
+import { opVisible, pendingLaunch, type Launch } from './operator-client'
+import { judgeProgress, replay, replayFrame } from './playback'
 import type { ReplayFrame } from './replay'
 import { CHAIN, CLEAN, FORK, OFFLINE } from './runtime'
 import { short, store, type Proposal } from './store'
 import { CARDS, ruleShort, type CardInfo } from './types'
+import { $, addrLink, esc, fullHash, hashSpan, I, num, patch, txLink } from './view'
 
 /** Stage mode: wide landscape screens. style.css uses the same query. */
 export const STAGE_QUERY = '(min-width: 960px) and (min-aspect-ratio: 5/4)'
 const STAGE_W = 1920
 const STAGE_H = 1080
-
-const $ = (id: string) => document.getElementById(id)!
 
 /** Developer drawer and help overlay (main.ts toggles them) */
 export const ui = { details: false, help: false }
@@ -44,50 +49,6 @@ export const ui = { details: false, help: false }
 /** During playback the hero shows the virtual block; live, the chain head */
 let RF: ReplayFrame | null = null
 const curBlock = () => (RF ? RF.vblock : blocks.latest)
-
-const prev = new Map<string, string>()
-function patch(id: string, html: string): boolean {
-  if (prev.get(id) === html) return false
-  prev.set(id, html)
-  $(id).innerHTML = html
-  return true
-}
-
-function esc(s: unknown): string {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
-}
-const num = (n: number) => n.toLocaleString('en-US')
-
-// ---------- icons (inline, stroke = currentColor) ----------
-const svg = (body: string, cls = '', vb = '0 0 24 24') =>
-  `<svg class="ic ${cls}" viewBox="${vb}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
-const I = {
-  mark: `<svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="1" y="1" width="38" height="38" rx="11" fill="#0f1834" stroke="#375BD2" stroke-opacity=".75"/><rect x="8" y="10" width="5" height="20" rx="1.6" fill="#8ea6ff"/><rect x="27" y="10" width="5" height="20" rx="1.6" fill="#35d49b"/><rect x="15.5" y="15.5" width="9" height="9" rx="2.6" fill="#ffffff"/></svg>`,
-  hex: svg('<path d="M12 2.6l8.2 4.7v9.4L12 21.4l-8.2-4.7V7.3z"/><path d="M12 7.6l4.1 2.35v4.7L12 17l-4.1-2.35v-4.7z" stroke-width="1.6"/>', 'hex'),
-  key: svg('<circle cx="7.5" cy="15.5" r="4"/><path d="M10.4 12.6L19 4M15.5 7.5l2.5 2.5M13.3 9.7l2 2"/>'),
-  proxy: svg('<path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M4 7.4l8 4.6 8-4.6M12 12v9.2"/>'),
-  lock: svg('<rect x="5" y="10.5" width="14" height="10.5" rx="2.6" fill="currentColor" fill-opacity=".16"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/>', 'lock'),
-  unlock: svg('<rect x="5" y="10.5" width="14" height="10.5" rx="2.6" fill="currentColor" fill-opacity=".16"/><path d="M8 10.5V7.8a4 4 0 0 1 7.7-1.6"/>', 'lock'),
-  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
-  x: svg('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>'),
-  eject: svg('<path d="M12 4.5l7.5 8.5h-15z" fill="currentColor" fill-opacity=".2"/><path d="M4.5 18.5h15"/>'),
-  clock: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
-  play: svg('<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>'),
-  pause: svg('<path d="M8.5 5.5v13M15.5 5.5v13" stroke-width="3"/>'),
-  ext: svg('<path d="M14 5h5v5M19 5l-8 8M17 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 5 18.5v-9A1.5 1.5 0 0 1 6.5 8H10"/>', 'ext'),
-}
-
-// ---------- links ----------
-function linkTo(base: string | null, v: string | undefined | null, n: number, cls = ''): string {
-  if (!v) return '<span class="dim">—</span>'
-  const url = explorerUrl(base, v)
-  if (url) return `<a class="mono xl ${cls}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(v)}">${esc(short(v, n))}${I.ext}</a>`
-  return `<span class="mono ${cls}" title="${esc(v)}">${esc(short(v, n))}</span>`
-}
-const txLink = (h: string | undefined | null, n = 4) => linkTo(CHAIN.explorerTx, h, n)
-const addrLink = (a: string | undefined | null, n = 4) => linkTo(CHAIN.explorerAddr, a, n)
-const hashSpan = (h: string | undefined | null, n = 4) => (h ? `<span class="mono" title="${esc(h)}">${esc(short(h, n))}</span>` : '<span class="dim">—</span>')
-const fullHash = (h: string | undefined | null) => (h ? `<span class="mono wrap">${esc(h)}</span>` : '<span class="dim">—</span>')
 
 /** Sourcify badge (live Sepolia only), shown after a confirmed match */
 function verifiedChip(addr: string | undefined | null): string {
@@ -104,6 +65,7 @@ export function mountSkeleton() {
       <div id="t-status" class="status" aria-live="polite"></div>
       <div class="bar-r"><div id="t-ctl" class="ctl"></div><div id="t-cre" class="cre"></div></div>
     </header>
+    <section id="lab" class="lab" aria-live="polite"></section>
     <main class="main">
       <section class="hero" aria-live="polite">
         <div id="h-head" class="h-head"></div>
@@ -121,6 +83,9 @@ export function mountSkeleton() {
     <section id="strip" class="strip"></section>
     <aside id="details" class="drawer" aria-hidden="true"></aside>
     <div id="help" class="help" aria-hidden="true"></div>
+    <div id="op" class="op" aria-hidden="true"></div>
+    <div id="op-token" class="op" aria-hidden="true"></div>
+    <div id="op-toast" class="op-toast" aria-live="polite"></div>
   </div>`
   if (CLEAN) document.documentElement.classList?.add('clean')
   startIdle()
@@ -206,9 +171,16 @@ export function identOf(p: Proposal): Ident {
   if (kind === 2) return { title: t('h.delay', { n: p.value ?? '?' }), desc: t('h.descGuard'), name: t('h.nameDelay') }
   if (kind === 3) return { title: t('h.paused', { a: short(p.target, 4) }), desc: t('h.descGuard'), name: t('h.namePaused') }
   const c = cardOf(p)
-  if (c) return { title: c.name, desc: cardDesc(c.id), name: c.name }
+  if (c) {
+    // the same plain sentence as its attack card (the technical one only for a demo implementation without a card)
+    const lc = LAB_CARDS.find((x) => x.impl === c.id)
+    return { title: c.name, desc: lc ? labLine(lc.id) : cardDesc(c.id), name: c.name }
+  }
   return { title: t('h.newImpl', { a: short(p.target, 4) }), desc: t('h.descUnknown'), name: short(p.target, 4) }
 }
+
+/** The rule a proposal was vetoed with (CRE first), if any */
+const vetoRuleOf = (p: Proposal | undefined): string | null => p?.guards.cre.rule ?? p?.guards.breakglass.rule ?? null
 
 const whoName = (by: string | undefined) => (by === 'cre' || by === undefined ? t('who.cre') : by === 'breakglass' ? t('who.human') : by === 'approver' ? t('who.approver') : t('who.someone'))
 
@@ -227,8 +199,32 @@ function etaSec(v: AirlockView): number {
   return Math.max(0, v.leftSec - since)
 }
 
+/** The picker's fast-forwarded cooldown, as a multiple of real time (12 s blocks at LAB_PLAY.fastMsPerBlock) */
+const FF_FACTOR = Math.round((CONFIG.blockSec * 1000) / (LAB_PLAY.fastMsPerBlock ?? LAB_PLAY.msPerBlock ?? 600))
+
+/** The address of this page in offline playback (the recorded real Sepolia run), keeping the language */
+function offlineHref(): string {
+  try {
+    const u = new URL(location.href)
+    for (const k of ['p', 'rpc', 'clean', 'op']) u.searchParams.delete(k)
+    u.searchParams.set('mode', 'offline')
+    return `${u.pathname}?${u.searchParams}`
+  } catch {
+    return '?mode=offline'
+  }
+}
+
+/** A replay between its arrival and its verdict: which CRE workflow step the verdict card is on (the same steps) */
+function replayStep(p: Proposal, now: number): { i: number; steps: PipeStep[] } | null {
+  if (!RF) return null
+  const f = judgeProgress(now)
+  if (f === null) return null
+  const steps = pipelineOf(p.kind, vetoRuleOf(store.proposals.get(RF.tl.id)))
+  return { i: Math.min(steps.length - 1, Math.floor(f * steps.length)), steps }
+}
+
 // ---------- the Chainlink CRE verdict of a proposal ----------
-type VKind = 'none' | 'await' | 'veto' | 'clear' | 'human' | 'approver' | 'skipped' | 'far' | 'clearFar' | 'loading'
+type VKind = 'none' | 'await' | 'veto' | 'clear' | 'human' | 'approver' | 'skipped' | 'far' | 'clearFar' | 'loading' | 'intro' | 'pending'
 /** live view before the proposals' logs arrive: a missing verdict log is still on its way, not out of reach */
 const logsPending = () => !OFFLINE && !chainHealth.loadedRecent
 interface VerdictInfo {
@@ -345,6 +341,9 @@ function renderBar() {
   if (OFFLINE) {
     const label = RECORDING.source === 'none' ? t('st.offlineEmpty') : t(RECORDING.source === 'sepolia' ? 'st.offline' : 'st.offlineFork')
     status = `<span class="pill replay"><i class="dot"></i>${esc(label)}</span>${blk(RF ? RF.vblock : RECORDING.head)}`
+  } else if (RF) {
+    // a replay on the live page: the pill says so (live comes back the moment the replay ends or a live event lands)
+    status = `<span class="pill replay"><i class="dot"></i>${esc(t('st.replayOf', { id: RF.tl.id }))}</span>${blk(RF.vblock)}`
   } else {
     const st = !blocks.latest ? 'connecting' : blocks.link === 'down' ? 'down' : 'live'
     const label = st === 'live' ? t(FORK ? 'st.fork' : 'st.live') : st === 'down' ? t('st.down') : t('st.connecting')
@@ -356,30 +355,53 @@ function renderBar() {
   const langs = LANGS.map((l) => `<button data-lang="${l}" class="${l === cur ? 'on' : ''}" aria-pressed="${l === cur}" lang="${l}">${LANG_LABEL[l]}</button>`).join('')
   patch(
     't-ctl',
-    `<div class="seg" role="group" title="${esc(t('ctl.langTitle'))}">${langs}</div>` +
+    opBarButton() +
+      `<div class="seg" role="group" title="${esc(t('ctl.langTitle'))}">${langs}</div>` +
       `<button data-act="details" class="btn${ui.details ? ' on' : ''}" title="${esc(t('ctl.detailsTitle'))}" aria-expanded="${ui.details}">${esc(t('ctl.details'))}</button>` +
       `<button data-act="help" class="btn sq${ui.help ? ' on' : ''}" title="${esc(t('ctl.helpTitle'))}" aria-label="${esc(t('ctl.help'))}">?</button>`,
   )
 }
 
 // ---------- hero ----------
-function renderHero(p: Proposal | null, v: AirlockView, now: number) {
+function renderHero(p: Proposal | null, v: AirlockView, now: number, intro: boolean, pend: Launch | null) {
   const m = mom(now)
   const enter = now < enterUntil ? ' enter' : ''
   const ph = v.phase
   const id = p ? identOf(p) : null
+  const slow = intro && introSlow(now)
+  const fastNow = !!RF && ph === 'cleared' && labPlaying(now)?.stage === 'fast'
 
   // which proposal
-  if (!p) {
+  if (pend) {
+    // the operator just launched a real attack: its transaction is on its way into a Sepolia block
+    patch(
+      'h-head',
+      `<div class="h-eyebrow"><span>${esc(t('h.pendEyebrow'))}</span><span class="tag live"><i class="dot"></i>${esc(t('h.live'))}</span></div>` +
+        `<h1 class="h-title">${esc(labName(pend.card))}</h1><p class="h-desc">${esc(t('h.pendDesc'))}</p>`,
+    )
+  } else if (intro) {
+    // first visit, before its replay starts: say a real attack is about to replay, never the newest final verdict.
+    // When the public RPCs do not answer for a while, say so and offer the recorded run instead of "in a moment".
+    const body = slow
+      ? `<h1 class="h-title">${esc(t('h.slowTitle'))}</h1><p class="h-desc">${esc(t('h.slowDesc'))} <a class="h-off" href="${esc(offlineHref())}">${esc(t('h.slowLink'))}</a></p>`
+      : `<h1 class="h-title">${esc(t('h.introTitle'))}</h1><p class="h-desc">${esc(t('h.introDesc'))}</p>`
+    patch('h-head', `<div class="h-eyebrow"><span>${esc(t('h.introEyebrow'))}</span><span class="tag replay">${I.play}${esc(t('h.replayReal'))}</span></div>` + body)
+  } else if (!p) {
     const n = delayBlocks()
     const head = PENDING ? (OFFLINE ? t('h.noRecording') : t('h.pending')) : OFFLINE || chainHealth.loadedRecent ? t('h.empty') : t('h.loading')
     patch('h-head', `<div class="h-eyebrow">&nbsp;</div><h1 class="h-title">${esc(head)}</h1><p class="h-desc">${esc(t('h.emptyDesc', { n, t: fmtDur(n * CONFIG.blockSec) }))}</p>`)
   } else {
+    // a replay says it is one (live mode: of a real Sepolia proposal, with its date); a proposal happening now says live
     const tag = RF
-      ? `<span class="tag replay">${RF.paused ? I.pause : I.play}${esc(t(RF.paused ? 'h.replayPaused' : 'h.replay'))}</span>`
+      ? `<span class="tag replay">${RF.paused ? I.pause : I.play}${RF.paused ? esc(t('h.replayPaused')) : OFFLINE ? esc(t('h.replay')) : replayLabel(store.proposals.get(RF.tl.id))}</span>`
       : p.dropped
         ? `<span class="tag warn">${esc(t('h.dropped'))}</span>`
-        : ''
+        : isLiveNow(p)
+          ? `<span class="tag live"><i class="dot"></i>${esc(t('h.live'))}</span>`
+          : OFFLINE
+            ? ''
+            : // a past proposal's real state: dated, so it never reads as if it had just happened live
+              `<span class="tag state">${esc(dayOf(p) ? t('h.onchain', { d: dayOf(p)! }) : t('h.onchainNoDate'))}</span>`
     patch(
       'h-head',
       `<div class="h-eyebrow${enter}"><span>${esc(t('h.eyebrow', { id: p.id, kind: kindText(p.kind) }))}</span>${tag}</div>` +
@@ -415,9 +437,19 @@ function renderHero(p: Proposal | null, v: AirlockView, now: number) {
       count =
         `<div class="cn-num"><b>${v.left}</b><span>${esc(t('c.left', { n: v.left }))}</span></div>` +
         `<div class="cn-eta">${I.clock}${esc(t('c.eta', { t: fmtClock(etaSec(v)) }))}<span class="cn-of">${esc(t('c.leftSub'))}</span></div>` +
-        (ph === 'cleared'
-          ? `<div class="cn-tag good">${I.check}${esc(v.clear?.by === 'cre' || !v.clear ? t('c.cleared') : t('c.clearedBy', { who: whoName(v.clear.by) }))}</div>`
-          : `<div class="cn-tag await">${esc(t('c.awaiting'))}</div>`)
+        // a replay's clock is compressed (it holds while the CRE judges): say so, so a still number does not look stuck
+        (RF ? `<div class="cn-rp">${esc(t('c.compressed'))}</div>` : '')
+      if (ph === 'cleared') {
+        count += fastNow
+          ? `<div class="cn-tag ff">${I.ff}${esc(t('c.ff', { n: FF_FACTOR }))}</div>`
+          : `<div class="cn-tag good">${I.check}${esc(v.clear?.by === 'cre' || !v.clear ? t('c.cleared') : t('c.clearedBy', { who: whoName(v.clear.by) }))}</div>`
+      } else {
+        // a replay walks through the workflow's steps here too (on a phone the verdict card is below the fold)
+        const rs = p ? replayStep(p, now) : null
+        count += rs
+          ? `<div class="cn-tag await step"><i class="spin"></i><span>${esc(t('c.step', { s: rs.i === rs.steps.length - 1 ? t('p.chain') : t(rs.steps[rs.i].k), i: rs.i + 1, n: rs.steps.length }))}</span></div>`
+          : `<div class="cn-tag await">${esc(t('c.awaiting'))}</div>`
+      }
       break
     case 'waiting':
       count = `<div class="cn-word warn">${esc(t('c.over'))}</div><div class="cn-sub">${esc(t('c.noClear'))}</div>`
@@ -436,7 +468,15 @@ function renderHero(p: Proposal | null, v: AirlockView, now: number) {
       still = true
       break
     default:
-      count = `<div class="cn-sub dim">${esc(t('c.empty'))}</div>`
+      // a replay's lead-in: the proposal is about to reach the outer door
+      count = pend
+        ? `<div class="cn-sub intro"><i class="spin"></i>${esc(t(pend.state === 'sending' ? 'op.sending' : 'c.pending'))}</div>` +
+          (pend.txHash ? `<div class="cn-tx">${txLink(pend.txHash, 6)}</div>` : '')
+        : intro
+          ? `<div class="cn-sub intro"><i class="spin"></i>${esc(t(slow ? 'c.slow' : 'c.intro'))}</div>`
+        : RF && p
+          ? `<div class="cn-sub arriving">${esc(t('c.arriving', { id: p.id }))}</div>`
+          : `<div class="cn-sub dim">${esc(t('c.empty'))}</div>`
   }
   // a ticking clock never carries the moment classes (it is redrawn every second)
   patch('h-count', `<div class="cn ph-${ph}${still ? m.cls : ''}" style="${still ? m.style : ''}">${count}</div>`)
@@ -503,7 +543,7 @@ function renderHero(p: Proposal | null, v: AirlockView, now: number) {
       text = t('b.chamber')
       break
     default:
-      text = t('b.idle')
+      text = pend ? t('b.pending') : intro ? t('b.intro') : RF && p ? t('b.arriving') : t('b.idle')
   }
   patch('h-banner', `<div class="banner ph-${ph}${m.cls}${enter}" style="${m.style}"><span class="bn-i">${icon}</span><span class="bn-t">${esc(text)}</span>${rule}</div>`)
 }
@@ -539,10 +579,11 @@ export function pipelineOf(kind: string | undefined, rule: string | null | undef
   return [STEP.sim, STEP.agree, ...tail]
 }
 
-function renderVerdict(p: Proposal | null, v: AirlockView, now: number) {
+function renderVerdict(p: Proposal | null, v: AirlockView, now: number, intro: boolean, pend: Launch | null) {
   const m = mom(now)
-  const vi = verdictOf(p, v)
-  patch('v-head', `${I.hex}<h2>${esc(t('v.title'))}</h2>`)
+  const vi: VerdictInfo = pend ? { kind: 'pending', rule: null, after: null } : intro ? { kind: 'intro', rule: null, after: null } : verdictOf(p, v)
+  // a replay says so here too (on a phone the labels at the top have scrolled away by now)
+  patch('v-head', `${I.hex}<h2>${esc(t('v.title'))}</h2>${RF && !OFFLINE ? `<span class="tag replay v-rp">${I.play}${esc(t('v.replayTag'))}</span>` : ''}`)
 
   let chip: string
   let body: string
@@ -581,6 +622,14 @@ function renderVerdict(p: Proposal | null, v: AirlockView, now: number) {
       chip = `<span class="v-chip await"><i class="spin"></i>${esc(t('v.awaiting'))}</span>`
       body = `<p class="v-rule">${esc(t('v.awaitText'))}</p>`
       break
+    case 'intro':
+      chip = `<span class="v-chip none">${I.play}${esc(t('v.introChip'))}</span>`
+      body = `<p class="v-rule dim">${esc(t('v.introText'))}</p>`
+      break
+    case 'pending':
+      chip = `<span class="v-chip none"><i class="spin"></i>${esc(t('v.pendChip'))}</span>`
+      body = `<p class="v-rule dim">${esc(t('v.pendText'))}</p>`
+      break
     default:
       chip = `<span class="v-chip none">${esc(t('v.none'))}</span>`
       body = `<p class="v-rule dim">${esc(t('v.noneText'))}</p>`
@@ -590,18 +639,26 @@ function renderVerdict(p: Proposal | null, v: AirlockView, now: number) {
   patch('v-main', `<div class="vm k-${vi.kind}${land ? m.cls : ''}" style="${land ? m.style : ''}"><div class="v-verdict">${chip}</div>${body}${time}</div>`)
 
   // the pipeline this proposal really went through: dim before a proposal, running while it waits, every step done
-  // once the verdict is on chain
+  // once the verdict is on chain. A replay walks through the steps one by one until its verdict lands (the steps
+  // the workflow runs, not their real timing: the real verdict time is the "after the proposal" line above).
   const st = land ? 'done' : vi.kind === 'await' ? 'run' : 'off'
   const last = vi.kind === 'veto' ? t('p.landVeto') : vi.kind === 'clear' ? t('p.landClear') : t('p.chain')
-  const steps = pipelineOf(p?.kind, vi.kind === 'veto' ? vi.rule : null)
+  // a replay's verdict decides the steps up front (an R7 change has no simulation step), so they do not change shape
+  const rule = vi.kind === 'veto' ? vi.rule : RF && st === 'run' ? (vetoRuleOf(store.proposals.get(RF.tl.id)) ?? null) : null
+  const steps = pipelineOf(p?.kind, rule)
   const end = steps.length - 1
+  const f = RF && st === 'run' ? judgeProgress(now) : null
+  const cur = f === null ? -1 : Math.min(end, Math.floor(f * steps.length))
   patch(
     'v-pipe',
-    `<ol class="pipe st-${st} k-${vi.kind} n-${steps.length}${land ? m.cls : ''}" style="${land ? m.style : ''}">` +
+    `<ol class="pipe st-${st} k-${vi.kind} n-${steps.length}${cur >= 0 ? ' seq' : ''}${land ? m.cls : ''}" style="${land ? m.style : ''}">` +
       steps
         .map((s, i) => {
           const x = vi.kind === 'veto' && (i === end || (s.fail && land))
-          return `<li class="${s.fail && land ? 'fail' : ''}" style="--i:${i}"><span class="pi-dot">${x ? I.x : I.check}</span><div class="pi-t"><b>${esc(i === end ? last : t(s.k))}</b><small>${esc(t(s.s))}</small></div></li>`
+          const sq = cur < 0 ? '' : i < cur ? 'ok' : i === cur ? 'cur' : 'next'
+          const cls = [s.fail && land ? 'fail' : '', sq].filter(Boolean).join(' ')
+          const dot = sq === 'cur' ? '<i class="spin"></i>' : x ? I.x : I.check
+          return `<li class="${cls}" style="--i:${i}"><span class="pi-dot">${dot}</span><div class="pi-t"><b>${esc(i === end ? last : t(s.k))}</b><small>${esc(t(s.s))}</small></div></li>`
         })
         .join('') +
       `</ol>`,
@@ -679,7 +736,7 @@ function renderStrip() {
   }
   patch(
     'strip',
-    `<div class="s-head"><h3>${esc(title)}</h3>${PENDING ? '' : auto}<span class="s-hint">${esc(t('s.hint'))}</span></div>` +
+    `<div class="s-head"><h3>${esc(title)}</h3>${PENDING ? '' : auto}<span class="s-hint">${esc(t('s.hint'))}</span>${tabsHtml()}</div>` +
       `<div class="s-cards" style="--n:${Math.max(ids.length, 1)}">${cards}</div>`,
   )
 }
@@ -789,6 +846,8 @@ const HELP_TEXT: Record<Action, Key> = {
   details: 'help.details',
   lang: 'help.lang',
   help: 'help.help',
+  lab: 'help.lab',
+  operator: 'help.operator',
   close: 'help.esc',
 }
 function renderHelp() {
@@ -796,7 +855,8 @@ function renderHelp() {
   el.classList.toggle('open', ui.help)
   el.setAttribute?.('aria-hidden', String(!ui.help))
   if (!ui.help) return
-  const rows = HELP_ROWS.map((r) => {
+  // the operator key is listed only where operator mode is on for this browser
+  const rows = HELP_ROWS.filter((r) => r.action !== 'operator' || opVisible()).map((r) => {
     const keys = r.keys.map((k) => `<kbd>${esc(k === 'Space' ? t('help.space') : k)}</kbd>`).join('')
     const what = r.action === 'prev' ? `${t('help.prev')} / ${t('help.next')}` : t(HELP_TEXT[r.action])
     return `<div class="hp-row"><span class="hp-k">${keys}</span><span class="hp-v">${esc(what)}</span></div>`
@@ -811,13 +871,19 @@ function renderHelp() {
 export function render() {
   const now = Date.now()
   RF = replayFrame(now)
-  const p = RF ? RF.p : store.active
+  // first visit before its replay: a neutral intro, not the newest proposal's final state. The operator's launch on
+  // its way into a block: shown as pending (auto-follow), not the previous proposal's final state
+  const pend = !RF && store.follow ? pendingLaunch(store.proposals.values(), now) : null
+  const intro = !RF && !pend && labIntro(now)
+  const p = RF ? RF.p : intro || pend ? null : store.active
   const v = viewOf(p)
   track(p?.id ?? null, v.phase, now)
   renderBar()
-  renderHero(p, v, now)
-  renderVerdict(p, v, now)
+  renderHero(p, v, now, intro, pend)
+  renderVerdict(p, v, now, intro, pend)
   renderStrip()
+  renderLab(now)
   renderDetails(p, v)
   renderHelp()
+  renderOperator(now)
 }

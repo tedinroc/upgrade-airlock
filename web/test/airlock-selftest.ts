@@ -25,17 +25,59 @@ import { ADMIN_ABI, RECEIVER_ABI } from '../src/abi'
 import { airlockView, fmtClock, fmtDur, startTitle } from '../src/airlock'
 import { blocks } from '../src/chain'
 import { DATA, PENDING, type RawLog } from '../src/chaindata'
-import { chainHealth, startChainWatch, TOPICS } from '../src/chainwatch'
+import { backfillLab, chainHealth, loadOrder, startChainWatch, TOPICS } from '../src/chainwatch'
 import { CONFIG } from '../src/config'
-import { HELP_ROWS, keyAction, stepId, type Action } from '../src/controls'
+import { HELP_ROWS, keyAction, labIndexOfKey, stepId, type Action } from '../src/controls'
 import { explorerUrl, fmtEth, fmtGasPrice, realWorkflowId } from '../src/derive'
-import { blockTs, handleLog, pickActive, setManualPick } from '../src/events'
+import { blockTs, handleLog, pickActive, resetSeen, setManualPick } from '../src/events'
 import { DICT, setLang, t, type Lang } from '../src/i18n'
-import { replay } from '../src/playback'
+import { historyIn, judgeProgress, playbackGate, replay, tickReplay } from '../src/playback'
 import { AutoReplay, buildTimeline, snapshotAt } from '../src/replay'
+import {
+  AUTOPLAY_CARD,
+  AUTOPLAY_DELAY_MS,
+  autoplayDataIn,
+  autoplayRuledOut,
+  autoplayWanted,
+  fmtDay,
+  INTRO_SLOW_MS,
+  introSlow,
+  introWanted,
+  lab,
+  LAB_CARDS,
+  LAB_IDS,
+  LAB_PLAY,
+  labIdOf,
+  labIntro,
+  labPlaying,
+  labSatisfied,
+  pickFor,
+  pickNow,
+  playLab,
+  stageOf,
+  stagesFor,
+  tickLab,
+  type AutoplayCtx,
+  type LabId,
+} from '../src/lab'
+import {
+  launchCard,
+  launchStage,
+  loadOperator,
+  mayOperate,
+  op,
+  OP_DISABLED,
+  operatorVisible,
+  parseLaunchResponse,
+  parseOperatorInfo,
+  saveToken,
+  takeTokenFromUrl,
+  tokenFromUrl,
+} from '../src/operator-client'
 import { CHAIN, chainWithRpc, CLEAN, FORK, GUARDS, isLoopback, MODE, OFFLINE, parseClean, parsePick, parseRpcOverride, pickMode } from '../src/runtime'
 import { newProposal, store, type Proposal } from '../src/store'
 import { ruleHashOf } from '../src/types'
+import { launchErrorText } from '../src/lab-ui'
 import { identOf, momentsFor, phrases, pipelineOf, render, STAGE_QUERY, ui } from '../src/ui'
 import { findBlocked, NAMES_NOTE, scanWeb } from './scan'
 
@@ -357,10 +399,34 @@ ok(P('1')?.chain?.status === 2 && P('2')?.chain?.status === 3 && P('3')?.chain?.
   ok(calls.length > 0 && maxRange <= 50, `eth_getLogs ranges <= 50 blocks (max ${maxRange}, ${calls.length} calls)`)
   ok(calls.every((f) => asList(f.address).includes(ADMIN.toLowerCase()) && asList(f.address).includes(RECV.toLowerCase())), 'every getLogs covers AirlockAdmin and AirlockReceiver')
   ok(asList(calls[0].topics[0]).length === TOPICS.length && TOPICS.length === 6, 'topics: Proposed, Vetoed, Cleared, Executed, ReasonAttached, Verdict')
-  ok(rpcCalls.every((x) => x.url === CHAIN.http[0]), `all JSON-RPC goes to ${CHAIN.http[0]} (rotation only on failure)`)
+  // history (eth_getLogs with a proposal id topic) goes to the history endpoint first (one public endpoint prunes old
+  // logs); everything else to the head endpoint; rotation only on failure
+  const isHist = (x: { method: string; params: unknown[] }) => x.method === 'eth_getLogs' && ((x.params[0] as { topics: unknown[] }).topics?.length ?? 0) > 1
+  ok(
+    CHAIN.historyHttp[0] === 'https://sepolia.drpc.org' &&
+      rpcCalls.filter(isHist).length > 0 &&
+      rpcCalls.filter(isHist).every((x) => x.url === CHAIN.historyHttp[0]) &&
+      rpcCalls.filter((x) => !isHist(x)).every((x) => x.url === CHAIN.http[0] || (x.method === 'eth_chainId' && x.url === CHAIN.historyHttp[0])),
+    `history getLogs go to ${CHAIN.historyHttp[0]}, every other JSON-RPC to ${CHAIN.http[0]} (rotation only on failure)`,
+  )
   ok(NoSocket.opened.includes(CHAIN.ws[0]), 'logs subscription over WS (eth_subscribe logs)')
 }
 ok(await until(() => !!store.receipts.get(T('v1').toLowerCase()) && !!store.receipts.get(T('c2').toLowerCase()) && blockTs.has(1000) && blockTs.has(1103), 5000), 'veto and clearance receipts (gasUsed, effectiveGasPrice) and block timestamps are read')
+
+// ---------- 6b. first visit: a neutral intro until its replay starts, never the newest proposal's final verdict ----------
+{
+  const plain = (h: string) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  setLang('zh-CN', false)
+  render()
+  const hero = plain(dom.els.get('h-head')?.innerHTML ?? '') + plain(dom.els.get('h-count')?.innerHTML ?? '')
+  const vm = plain(dom.els.get('v-main')?.innerHTML ?? '')
+  ok(labIntro() && hero.includes('正在载入一笔真实攻击') && hero.includes('重播即将开始') && vm.includes('等待重播'), `first visit, data in, replay not started yet: the intro (${hero.slice(0, 60)})`)
+  ok(!(dom.els.get('h-lock')?.innerHTML ?? '').includes('ph-ejected') && !(dom.els.get('h-lock')?.innerHTML ?? '').includes('ph-executed') && !/否决|放行|已弹出|已执行/.test(hero + vm), 'the intro shows no verdict: no ejected or executed airlock, no Veto or Clear')
+  // sections 7-9 read the page after its first-visit replay (the intro is over); 10g plays the autoplay itself
+  lab.autoplay = 'done'
+  render()
+  ok(!labIntro() && !plain(dom.els.get('h-head')?.innerHTML ?? '').includes('正在载入一笔真实攻击'), 'once the first-visit replay is over (or ruled out), the newest proposal is on screen')
+}
 
 // ---------- 7. rendering in three languages ----------
 blocks.ingest(1200)
@@ -400,7 +466,7 @@ function shot(id: string, l: Lang, details = false): { h: string; title: string 
   ok(a.title === 'Upgrade Airlock 升级气闸 · 战情室', `tab title: ${a.title}`)
   const strip = region('strip')
   const acts = [...strip.matchAll(/data-act="([^"]+)"/g)].map((m) => m[1].split(':')[0])
-  ok(acts.every((x) => ['sel', 'follow'].includes(x)) && strip.includes('data-act="sel:1"') && strip.includes('data-act="sel:3"') && strip.includes('class="pc ph-ejected on"'), `strip: one card per proposal, the shown one highlighted, plus the auto-follow switch (${[...new Set(acts)].join(', ')})`)
+  ok(acts.every((x) => ['sel', 'follow', 'tab'].includes(x)) && strip.includes('data-act="sel:1"') && strip.includes('data-act="sel:3"') && strip.includes('class="pc ph-ejected on"') && strip.includes('data-act="tab:lab"'), `strip: one card per proposal, the shown one highlighted, the auto-follow switch and the tab back to the attack picker (${[...new Set(acts)].join(', ')})`)
   ok(plain(strip).includes('R1 · 总供应量被改') && plain(strip).includes('否决 +2 块') && plain(strip).includes('放行 +3 块') && plain(strip).includes('已执行'), 'strip cards: rule, verdict blocks after the proposal, executed')
   const ids = [...strip.matchAll(/data-act="sel:(\d+)"/g)].map((m) => m[1])
   ok(ids.join(',') === '1,2,3', `strip reads left to right, oldest to newest (${ids.join(',')})`)
@@ -411,19 +477,19 @@ function shot(id: string, l: Lang, details = false): { h: string; title: string 
 }
 {
   const a = shot('2', 'zh-CN', true)
-  const w = ['已执行 · DemoBTC v2 上线', '升级已生效', '区块 #1,180 开启', 'DemoBTC v2', '诚实的升级：只多一个 version()', '放行', '撑过攻击模拟：每条规则都守住了', '提案后 3 块 · 36 秒', '放行上链', '已换上 DemoBTC v2', '执行交易']
+  const w = ['已执行 · DemoBTC v2 上线', '升级已生效', '区块 #1,180 开启', 'DemoBTC v2', '只多一个 version() 的诚实升级：放行后执行', '放行', '撑过攻击模拟：每条规则都守住了', '提案后 3 块 · 36 秒', '放行上链', '已换上 DemoBTC v2', '执行交易']
   ok(lack(w, plain(a.h)) === '' && a.h.includes('class="lk ph-executed') && a.h.includes('pipe st-done k-clear'), `zh-CN executed: cleared by the CRE, then the inner door opened${lack(w, plain(a.h))}`)
   ok(a.h.includes(`https://sepolia.etherscan.io/tx/${T('e2')}`) && a.h.includes(`https://sepolia.etherscan.io/tx/${T('c2')}`), 'executed: report tx and execute tx links')
 }
 {
   const a = shot('3', 'zh-CN')
-  const w = ['冷静期已满', '链上还没有放行', '冷静期已满 · 没有放行，内门继续锁住', '锁住 · 没有放行', '判定中', 'EvilBaseFee', '模拟里（basefee 为 0）表现得像 v1']
+  const w = ['冷静期已满', '链上还没有放行', '冷静期已满 · 没有放行，内门继续锁住', '锁住 · 没有放行', '判定中', 'EvilBaseFee', '模拟里装成好人，上了真实区块才让人增发']
   ok(lack(w, plain(a.h)) === '' && a.h.includes('class="lk ph-waiting') && a.h.includes('class="banner ph-waiting') && a.h.includes('pipe st-run'), `zh-CN past readyBlock without clearance: inner door stays locked${lack(w, plain(a.h))}`)
 }
 for (const [id, words] of [
   ['1', ['升級氣閘 · 每次代理升級都要過 Chainlink CRE', '外門', '氣閘艙', '內門', '已彈出', '陌生地址的一次呼叫就改變了總供應量。', '提案後 2 塊 · 24 秒', '永久封死', '證據雜湊', '事件串流']],
   ['2', ['已執行 · DemoBTC v2 上線', '升級已生效', '放行', '撐過攻擊模擬：每條規則都守住了', '放行上鏈']],
-  ['3', ['冷靜期已滿', '鎖住 · 沒有放行', '模擬裡（basefee 為 0）表現得像 v1']],
+  ['3', ['冷靜期已滿', '鎖住 · 沒有放行', '模擬裡裝成好人，上了真實區塊才讓人增發']],
 ] as const) {
   const a = shot(id, 'zh-TW', id === '1')
   const p = plain(a.h)
@@ -435,7 +501,7 @@ for (const [id, words] of [
 for (const [id, words] of [
   ['1', ['Every proxy upgrade, cleared by Chainlink CRE', 'Live · Ethereum Sepolia', 'Outer door', 'Chamber', 'Inner door', 'Ejected', 'Ejected · vetoed by Chainlink CRE', "A stranger's call changed the total supply.", 'R1 · Supply changed', '2 blocks · 24 s after the proposal', 'Sealed for good · execute reverts', 'Chainlink CRE verdict', 'Attack simulation', 'eth_simulateV1 on 4 RPC providers', 'All answers agree', 'at least 2 of 4 answer · every answer matches', 'Consensus', 'Signed report', 'Veto on chain', 'Proposal tx', 'Report tx', 'Evidence hash', 'Event stream', 'Verdict tx cost']],
   ['2', ['Executed · DemoBTC v2 is live', 'Upgrade is live', 'Survived the attack simulation: every rule held.', 'Clear on chain', '3 blocks · 36 s after the proposal', 'now runs DemoBTC v2', 'Execute tx', 'Every rule held', 'Clear +3 blocks · executed']],
-  ['3', ['Cooldown over', 'Locked · no clearance', 'Judging', 'Acts like v1 in a simulation']],
+  ['3', ['Cooldown over', 'Locked · no clearance', 'Judging', 'Plays nice in a simulation']],
 ] as const) {
   const a = shot(id, 'en', id === '1')
   const p = plain(a.h)
@@ -594,9 +660,9 @@ setLang('zh-CN', false)
   const zh = ['已弹出 · Chainlink CRE 否决', 'R3B', '外人没有授权就搬走了持有人的代币。', 'EvilDrain']
   ok(lack(zh, plain(a.h)) === '' && a.h.includes('class="lk ph-ejected') && a.h.includes('pipe st-done k-veto'), `the CRE veto (R3B) wins over the approver's clearance${lack(zh, plain(a.h))}`)
   const tw = plain(shot('5', 'zh-TW').h)
-  ok(lack(['外人沒有授權就搬走了持有人的代幣。', '新增 rescue()：任何人都能不經授權搬走持有人的幣'], tw) === '' && !SIMPLIFIED_ONLY.test(tw), 'zh-TW: R3B and the EvilDrain card, no simplified characters')
+  ok(lack(['外人沒有授權就搬走了持有人的代幣。', '新增 rescue()：不經授權就能搬走別人的幣'], tw) === '' && !SIMPLIFIED_ONLY.test(tw), 'zh-TW: R3B and the EvilDrain card, no simplified characters')
   const en = plain(shot('5', 'en').h)
-  const enw = ['EvilDrain', "Adds rescue(): anyone can move a holder's tokens without an allowance", "An outsider moved a holder's tokens without an allowance.", 'R3B · Holder funds moved']
+  const enw = ['EvilDrain', "Adds rescue(): anyone can move other people's tokens", "An outsider moved a holder's tokens without an allowance.", 'R3B · Holder funds moved']
   ok(lack(enw, en) === '' && !CJK.test(en), `en: R3B and the EvilDrain card${lack(enw, en)}`)
 }
 
@@ -669,6 +735,419 @@ setLang('zh-CN', false)
   setLang('en', false)
   ok(t('p.agreeS') === 'at least 2 of 4 answer · every answer matches', 'en: the agreement step reads correctly')
   setLang('zh-CN', false)
+}
+
+
+// ---------- 10. attack picker (lab.ts) and operator mode (operator-client.ts) ----------
+{
+  // 10a. which card a proposal is
+  const names = store.implNames
+  const mk = (id: string, kind: string, target: string, value = '0', extra: Partial<Proposal> = {}): Proposal => ({ ...newProposal(id), kind, target, value, codehash: '0x02', proposeBlock: 100, readyBlock: 125, ...extra })
+  ok(LAB_IDS.join(',') === 'evil-mint,evil-owner,evil-fee,evil-basefee,evil-drain,remove-receiver,v2' && LAB_CARDS.length === 7, 'picker: seven cards in the order of the operator API card ids')
+  const upg = (['evilMint', 'evilOwner', 'evilFee', 'evilBaseFee', 'evilDrain', 'v2'] as const).map((k) => labIdOf(mk('1', '0', IMPL[k]), names))
+  ok(upg.join(',') === 'evil-mint,evil-owner,evil-fee,evil-basefee,evil-drain,v2', `card -> proposal: an upgrade to each demo implementation is its card (${upg.join(',')})`)
+  ok(labIdOf(mk('1', '1', RECV, '0'), names) === 'remove-receiver' && labIdOf(mk('1', '1', RECV.toUpperCase().replace('0X', '0x'), '0'), names) === 'remove-receiver', 'card -> proposal: removing the CRE receiver (guardian change, value 0) is "remove-receiver"')
+  ok(
+    [mk('1', '1', RECV, '1'), mk('1', '1', OWNER, '0'), mk('1', '0', IMPL.v1), mk('1', '0', IMPL.paused), mk('1', '2', ZERO32.slice(0, 42), '20'), mk('1', '3', IMPL.paused), mk('1', '0', '')].every((p) => labIdOf(p, names) === null),
+    'card -> proposal: adding a guardian, another guardian, v1, the paused target, a cooldown or break-glass change are not picker cards',
+  )
+  const ME = (id: string, b: number, extra: Partial<Proposal> = {}) => mk(id, '0', IMPL.evilMint, '0', { proposeBlock: b, readyBlock: b + 25, proposeTx: H(b), ...extra })
+  const veto = (b: number) => ({ guards: { cre: { verdict: 'veto' as const, rule: 'R1_TOTAL_SUPPLY', tx: H(b), block: b }, breakglass: {} }, chain: { status: 2, vetoCount: 1, proposer: OWNER, clearanceOf: null } })
+  const set = [ME('1', 100, veto(101)), ME('5', 500, veto(502)), ME('7', 700)]
+  const pk = pickFor('evil-mint', set, names, 710)
+  ok(pk.replay?.id === '5' && pk.live?.id === '7', `the card replays its newest judged proposal (#${pk.replay?.id}) and shows a newer one in its cooldown as live (#${pk.live?.id})`)
+  ok(pickFor('evil-mint', set, names, 800).live === null && pickFor('evil-mint', [ME('7', 700, { dropped: true })], names, 710).live === null, 'a proposal past its cooldown without a verdict, or dropped in a reorg, is not live')
+  const V2 = (id: string, b: number, exec: boolean) => {
+    const p = mk(id, '0', IMPL.v2, '0', { proposeBlock: b, readyBlock: b + 25 })
+    p.clearance = { evidenceHash: H(b + 1), clearer: RX, by: 'cre', tx: H(b + 1), block: b + 1 }
+    p.guards.cre = { verdict: 'pass', tx: H(b + 1), block: b + 1 }
+    if (exec) p.execute = { tx: H(b + 30), block: b + 30 }
+    p.chain = { status: exec ? 3 : 1, vetoCount: 0, proposer: OWNER, clearanceOf: H(b + 1) }
+    return p
+  }
+  const v2s = [V2('2', 200, true), V2('6', 600, false)]
+  ok(pickFor('v2', v2s, names).replay?.id === '2' && pickFor('v2', [V2('6', 600, false)], names).replay?.id === '6', 'the v2 card prefers the newest executed upgrade (clear, cooldown, execute), else the newest cleared one')
+  ok(labSatisfied('v2', pickFor('v2', v2s, names)) && !labSatisfied('v2', pickFor('v2', [V2('6', 600, false)], names)) && !labSatisfied('evil-mint', { replay: null, live: null }), 'the backfill keeps looking for an executed v2')
+  // on the fake Sepolia read above
+  const now = LAB_IDS.map((id) => `${id}:${pickNow(id).replay?.id ?? '-'}`).join(' ')
+  ok(pickNow('evil-mint').replay?.id === '1' && pickNow('v2').replay?.id === '4' && pickNow('evil-drain').replay?.id === '5' && pickNow('remove-receiver').replay?.id === '7' && pickNow('evil-basefee').replay === null, `picker on the fake Sepolia: ${now}`)
+
+  // 10b. the picker's playback: arrival, a "judging" hold, the verdict, then the cooldown fast-forwarded
+  {
+    const p = base()
+    p.proposeTx = H(100)
+    p.clearance = { evidenceHash: H(0xc1), clearer: RX, by: 'cre', tx: H(102), block: 102 }
+    p.guards.cre = { verdict: 'pass', tx: H(102), block: 102 }
+    p.execute = { tx: H(127), block: 127 }
+    p.chain = { status: 3, vetoCount: 0, proposer: '0x1', clearanceOf: H(0xc1) }
+    const e = new AutoReplay(0, { msPerBlock: 600, firstDelayMs: 0, idleMs: 1000, gapMs: 0, reducedHoldMs: 100 })
+    e.paused = true
+    e.playOne(0, p, false, { msPerBlock: 100, fastMsPerBlock: 10, gapMs: 0 })
+    const vb = (ms: number) => e.frame(ms, () => p)?.vblock
+    ok(vb(450) === 102 && vb(505) === 103 && vb(715) === 124 && vb(725) === 125, 'picker playback: blocks before the verdict at the normal pace, the rest of the cooldown fast-forwarded')
+    ok(e.progress(0)?.f === 0 && e.progress(10_000)?.f === 1 && e.onDemand, 'picker playback reports its progress (0..1)')
+    const j = base()
+    j.guards.cre = { verdict: 'veto', rule: 'R1_TOTAL_SUPPLY', tx: H(101), block: 101 }
+    j.chain = { status: 2, vetoCount: 1, proposer: '0x1', clearanceOf: null }
+    e.playOne(0, j, false, { msPerBlock: 100, dwellMs: { judging: 1000 } })
+    ok(vb(250) === 100 && vb(1250) === 100 && vb(1350) === 101, 'a verdict one block after the proposal still gets a "judging" hold')
+    const tl = buildTimeline(p)!
+    ok(stagesFor('ejected', false).join() === 'arrive,judge,veto' && stagesFor('cleared', true).join() === 'arrive,judge,clear,fast,exec', 'picker steps: arrive, judge, veto | clear, fast-forward, execute')
+    ok(stageOf('idle', 98, tl) === 'arrive' && stageOf('chamber', 101, tl) === 'judge' && stageOf('cleared', 102, tl) === 'clear' && stageOf('cleared', 110, tl) === 'fast' && stageOf('executed', 127, tl) === 'exec' && stageOf('ejected', 101, tl) === 'veto', 'picker step of each phase')
+    ok(LAB_PLAY.fastMsPerBlock! < LAB_PLAY.msPerBlock! && (LAB_PLAY.dwellMs?.judging ?? 0) > 0 && (LAB_PLAY.dwellMs?.verdict ?? 0) >= 3000, 'the picker holds on the verdict and fast-forwards the cooldown')
+    ok(fmtDay(Date.UTC(2026, 9, 20, 16, 30) / 1000) === '2026-10-21' && fmtDay(undefined) === null && fmtDay(0) === null, 'replay dates are venue dates (UTC+8)')
+  }
+
+  // 10c. first-visit autoplay rules
+  const ctx: AutoplayCtx = { clean: false, pick: null, offline: false, ready: true, interacted: false, liveBusy: false }
+  ok(autoplayWanted(ctx), 'first visit: the page plays one replay on its own')
+  ok(!autoplayWanted({ ...ctx, clean: true }) && autoplayRuledOut({ ...ctx, clean: true }), 'no autoplay with ?clean=1 (recording)')
+  ok(!autoplayWanted({ ...ctx, pick: '4' }) && autoplayRuledOut({ ...ctx, pick: '4' }), 'no autoplay with ?p=<id>')
+  ok(!autoplayWanted({ ...ctx, offline: true }) && !autoplayWanted({ ...ctx, interacted: true }) && autoplayRuledOut({ ...ctx, interacted: true }), 'no autoplay offline (the loop plays) or after the viewer picked something')
+  ok(!autoplayWanted({ ...ctx, ready: false }) && !autoplayWanted({ ...ctx, liveBusy: true }) && !autoplayRuledOut({ ...ctx, liveBusy: true }) && !autoplayRuledOut({ ...ctx, ready: false }), 'autoplay waits for the data and for a live proposal to finish its cooldown')
+  ok(introWanted(ctx) && introWanted({ ...ctx, ready: false }) && introWanted({ ...ctx, ready: false, liveBusy: true }), 'intro: shown while the data loads and until the first-visit replay starts')
+  ok(!introWanted({ ...ctx, clean: true }) && !introWanted({ ...ctx, pick: '4' }) && !introWanted({ ...ctx, offline: true }) && !introWanted({ ...ctx, interacted: true }) && !introWanted({ ...ctx, liveBusy: true }), 'no intro with ?clean=1, ?p=, offline, after a pick, or when a live proposal is in its cooldown (live wins)')
+  ok(AUTOPLAY_CARD === 'evil-drain' && labIndexOfKey('1') === 0 && labIndexOfKey('7') === 6 && labIndexOfKey('8') === null && keyAction('5') === 'lab' && keyAction('o') === 'operator', 'autoplay card is evil-drain; keys 1-7 play the cards, O opens the operator panel')
+
+  // 10d. the operator UI stays invisible: disabled, 404, network error, or no token
+  setLang('zh-CN', false)
+  const res = (status: number, body: unknown) => (async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
+  const opHtml = () => {
+    render()
+    const h = html() + region('t-ctl') + region('lab')
+    return /data-act="(operator|opask|opgo)|class="lc-op|op-badge|实战发起/.test(h)
+  }
+  ok(JSON.stringify(parseOperatorInfo(404, null)) === JSON.stringify(OP_DISABLED) && !parseOperatorInfo(200, { enabled: false, auth: 'none', cards: ['v2'], cooldownBlocks: 3 }).enabled && !parseOperatorInfo(200, { enabled: true, auth: 'open', cards: ['v2'] }).enabled && !parseOperatorInfo(200, { enabled: true, auth: 'none', cards: ['0x01'] }).enabled, 'GET /api/operator: 404, enabled false, an unknown auth or no known card mean disabled')
+  const good = parseOperatorInfo(200, { enabled: true, auth: 'token', cards: ['v2', 'evil-mint', 'bogus'], cooldownBlocks: 3 })
+  ok(good.enabled && good.auth === 'token' && good.cards.join() === 'evil-mint,v2' && good.cooldownBlocks === 3, 'GET /api/operator: known cards only, in picker order')
+  const TOKEN = 'test-operator-token-0123456789abcdef'
+  ok(!operatorVisible(OP_DISABLED, TOKEN) && !operatorVisible(good, null) && operatorVisible(good, TOKEN) && operatorVisible({ ...good, auth: 'none' }, null), 'operator UI: needs enabled AND (auth none OR a token)')
+  op.token = null
+  await loadOperator(res(404, { error: 'not found' }))
+  ok(!op.info.enabled && op.loaded && !opHtml(), 'a static deploy (404): nothing operator-related on the page')
+  await loadOperator((async () => {
+    throw new Error('offline')
+  }) as unknown as typeof fetch)
+  ok(!op.info.enabled && !opHtml(), 'the API unreachable: nothing operator-related on the page')
+  await loadOperator(res(200, { enabled: true, auth: 'token', cards: [...LAB_IDS], cooldownBlocks: 3 }))
+  ok(op.info.enabled && !opHtml(), 'enabled but no token in this browser: nothing operator-related on the page')
+  op.prompt = true
+  render()
+  ok(region('op-token').includes('data-form="optoken"') && region('op-token').includes('type="password"') && plain(region('op-token')).includes('口令只存在这台浏览器里') && !opHtml(), '?op=1: a small token prompt (password field), and still no operator controls until a token is saved')
+  await loadOperator(res(404, null))
+  render()
+  ok(!op.prompt && region('op-token') === '', '?op=1 on a page without the operator API: no prompt at all')
+  await loadOperator(res(200, { enabled: true, auth: 'token', cards: [...LAB_IDS], cooldownBlocks: 3 }))
+  ui.help = true
+  render()
+  ok(!plain(region('help')).includes('实战发起面板') && plain(region('help')).includes('重播第 1–7 种攻击'), 'the help lists keys 1-7 for everyone, the operator key only for the operator')
+  ui.help = false
+
+  // 10e. the token: ?op=<token> is kept in this browser and leaves the address bar at once
+  const t1 = tokenFromUrl(`http://localhost/?lang=en&op=${TOKEN}#top`)
+  ok(t1.token === TOKEN && t1.stripped === '/?lang=en#top' && !t1.stripped.includes(TOKEN), '?op=<token>: the token is read and the address loses it')
+  const t2 = tokenFromUrl('http://localhost/?op=1')
+  const t3 = tokenFromUrl('http://localhost/?op=short&p=4')
+  ok(t2.prompt && t2.token === null && t2.stripped === '/' && t3.token === null && t3.stripped === '/?p=4' && tokenFromUrl('http://localhost/?lang=en').stripped === null, '?op=1 asks for the token; a malformed token is dropped (and still stripped); no ?op leaves the address alone')
+  const t4 = tokenFromUrl(`http://localhost/?lang=en#op=${TOKEN}`)
+  const t5 = tokenFromUrl(`http://localhost/?op=1#op=${TOKEN}&x=1`)
+  ok(
+    t4.token === TOKEN && t4.stripped === '/?lang=en' && t5.token === TOKEN && t5.stripped === '/#x=1' && !t5.stripped.includes(TOKEN) && tokenFromUrl('http://localhost/#top').stripped === null && tokenFromUrl('http://localhost/#stop=1').stripped === null,
+    '#op=<token> (never sent to the server) is read the same way and leaves the address; #top or #stop=1 are left alone',
+  )
+  {
+    const keep = { token: op.token, prompt: op.prompt }
+    op.token = null
+    op.prompt = false
+    const pub = ['upgrade-airlock.pages.dev', 'example.org', '', null, undefined, '127.0.0.1.nip.io'].every((h) => !mayOperate(h))
+    const lo = ['127.0.0.1', 'localhost', '[::1]'].every((h) => mayOperate(h))
+    op.prompt = true
+    const asked = mayOperate('upgrade-airlock.pages.dev')
+    op.prompt = false
+    op.token = TOKEN
+    const held = mayOperate('upgrade-airlock.pages.dev')
+    op.token = keep.token
+    op.prompt = keep.prompt
+    ok(pub && lo && asked && held, 'a public visitor never asks /api/operator; only a loopback host, ?op=1 or a saved token do')
+  }
+  {
+    const g = globalThis as unknown as Record<string, unknown>
+    const loc = g.location as { search: string; href: string }
+    const was = loc.href
+    const replaced: string[] = []
+    g.history = { state: null, replaceState: (_s: unknown, _t: string, u: string) => void replaced.push(String(u)) }
+    loc.href = `http://localhost/?mode=airlock&op=${TOKEN}`
+    dom.mem.delete('airlock.op')
+    op.token = null
+    takeTokenFromUrl()
+    loc.href = was
+    ok(op.token === TOKEN && dom.mem.get('airlock.op') === TOKEN && replaced.length === 1 && replaced[0] === '/?mode=airlock' && !replaced[0].includes(TOKEN), 'page load: the token goes to localStorage and history.replaceState removes it from the URL')
+  }
+  ok(opHtml(), 'with the token, the operator UI appears')
+  render()
+  const opAsk = [...region('lab').matchAll(/data-act="opask:([a-z0-9-]+)"/g)].map((m) => m[1])
+  ok(region('t-ctl').includes('data-act="operator"') && opAsk.join(',') === LAB_IDS.join(','), `operator: the bolt button in the top bar and a launch button on each of the 7 cards (${opAsk.length})`)
+  op.panel = true
+  op.confirm = 'evil-mint'
+  render()
+  const panel = plain(region('op'))
+  ok(lack(['在 Sepolia 上真实发起攻击', '确定在 Sepolia 上发起「任意增发」？', '这会送出一笔真实交易（proposeUpgrade）', '确认发起', '预期：否决 R1', 'proposeSetGuardian(AirlockReceiver, false)', '两次发起至少间隔 3 块'], panel) === '' && region('op').includes('data-act="opgo:evil-mint"') && (region('op').match(/data-act="opgo:/g) ?? []).length === 1, `operator panel: one confirm step before a real launch${lack(['确认发起'], panel)}`)
+  setLang('en', false)
+  render()
+  ok(region('op').includes('Launch &quot;Infinite mint&quot; on Sepolia?') && !CJK.test(plain(region('op'))), 'operator panel in English')
+  setLang('zh-CN', false)
+
+  // 10f. a launch: exactly {card} with the bearer token, then the war room follows the transaction on chain
+  const calls: { url: string; init: RequestInit }[] = []
+  const LTX = H32('launch tx')
+  const okFetch = (async (url: string, init: RequestInit) => {
+    calls.push({ url, init })
+    return new Response(JSON.stringify({ ok: true, card: 'evil-mint', txHash: LTX }), { status: 200 })
+  }) as unknown as typeof fetch
+  let sent = 0
+  ok((await launchCard('evil-owner' as never, store.proposals.values(), () => sent++, okFetch))?.ok === true, 'a launch is sent')
+  const c0 = calls[0]
+  const hdr = c0.init.headers as Record<string, string>
+  ok(c0.url === '/api/operator/propose' && c0.init.method === 'POST' && c0.init.body === '{"card":"evil-owner"}' && hdr.authorization === `Bearer ${TOKEN}` && !c0.url.includes(TOKEN), 'POST /api/operator/propose with only {card} and the bearer token in a header')
+  ok(sent === 1 && op.launch?.state === 'sent' && op.launch.txHash === LTX && launchStage(op.launch, store.proposals.values()).stage === 'sent', 'after the server answers: the tx hash, pending')
+  ok((await launchCard('v2', store.proposals.values(), () => sent++, okFetch)) === null && calls.length === 1, 'one launch at a time: a second one waits until the first is on chain')
+  op.panel = false
+  render()
+  ok(plain(region('op-toast')).includes('交易已送出 · 等待上链') && region('op-toast').includes(`https://sepolia.etherscan.io/tx/${LTX}`), 'the status toast: tx sent, with its Etherscan link')
+  ok(plain(region('h-head')).includes('操作员刚刚发起 · 真实交易') && plain(region('h-head')).includes('抢走 owner') && region('h-head').includes('tag live') && region('h-count').includes(`https://sepolia.etherscan.io/tx/${LTX}`) && plain(region('v-main')).includes('等待上链') && !region('h-lock').includes('ph-ejected'), 'while the launch is on its way into a block, the airlock shows it as pending (live), not the previous final verdict')
+  HEAD = 1330
+  const NOHOOK = { wantReceipt() {}, wantBlockTs() {}, refresh() {}, onLive: (ts: number) => replay.onLive(ts) }
+  handleLog(mkLog(ADMIN_ABI, ADMIN, 'Proposed', { id: 10n, kind: 0, target: IMPL.evilOwner, value: 0n, data: '0x', codehash: H32('c10'), readyBlock: 1325n }, 1300, LTX, 0), true, NOHOOK)
+  blocks.ingest(1301)
+  render()
+  ok(store.activeId === '10' && plain(region('op-toast')).includes('提案 #10 已进气闸 · 等待 Chainlink CRE 判定') && region('h-head').includes('tag live') && plain(region('h-head')).includes('实时') && !region('h-head').includes('tag replay'), 'the proposal lands: auto-follow shows it, labelled live (not a replay); the toast says it is in the airlock')
+  ok(region('lab').includes(`实时 #10`) && plain(region('t-status')).includes('实时 · Ethereum Sepolia'), 'the picker card of that attack says live #10; the top bar says live')
+  // a visitor starts a picker replay of an older proposal meanwhile; the live verdict of #10 then takes the screen back
+  const pickedReplay = playLab('evil-mint') && !!labPlaying() && store.activeId !== '10'
+  handleLog(mkLog(ADMIN_ABI, ADMIN, 'Vetoed', { id: 10n, guardian: RECV, ruleHash: ruleHashOf('R2_OWNER'), vetoCount: 1n }, 1302, H32('veto 10'), 0), true, NOHOOK)
+  ok(pickedReplay && !labPlaying() && store.activeId === '10', 'auto-follow: a live verdict on the newest proposal stops a picker replay and shows that proposal, not the replayed one')
+  render()
+  ok(plain(region('op-toast')).includes('提案 #10 已否决 · Chainlink CRE · R2'), `the verdict lands in the toast: ${plain(region('op-toast')).trim()}`)
+  const fail = (status: number, body: unknown) => launchCard('v2', store.proposals.values(), () => sent++, res(status, body))
+  await fail(409, { ok: false, error: 'cooldown', retryAfterBlocks: 2 })
+  render()
+  ok(op.launch?.error === 'cooldown' && plain(region('op-toast')).includes('冷却中 · 再等 2 块（约 24 秒）'), '409: cooling down, with the blocks to wait')
+  await fail(422, { ok: false, error: 'reverted', detail: 'secret internals' })
+  render()
+  ok(op.launch?.error === 'reverted' && !region('op-toast').includes('secret internals'), '422: the dry run reverted; the server words are never shown')
+  // every answer of the API contract maps to its own error, and every error to its own sentence in each language
+  const errOf = (st: number, body: unknown) => (parseLaunchResponse(st, body) as { error?: string }).error
+  const table: [number, unknown, string][] = [
+    [200, { ok: true, card: 'v2', txHash: '0x12' }, 'unclear'],
+    [200, { ok: true, card: 'not-a-card', txHash: LTX }, 'unclear'],
+    [400, { ok: false, error: 'unknown card' }, 'unknown card'],
+    [401, { ok: false, error: 'unauthorized' }, 'unauthorized'],
+    [403, { ok: false, enabled: false, error: 'disabled' }, 'disabled'],
+    [403, { ok: false, error: 'forbidden' }, 'forbidden'],
+    [404, null, 'disabled'],
+    [405, { ok: false, error: 'method' }, 'server'],
+    [409, { ok: false, error: 'cooldown', retryAfterBlocks: 2 }, 'cooldown'],
+    [422, { ok: false, error: 'reverted' }, 'reverted'],
+    [500, { ok: false, error: 'misconfigured' }, 'misconfigured'],
+    [500, { ok: false, error: 'internal' }, 'server'],
+    [502, { ok: false, error: 'rpc' }, 'rpc'],
+  ]
+  const wrong = table.filter(([st, b, e]) => errOf(st, b) !== e).map(([st, b]) => `${st}:${JSON.stringify(b)}->${errOf(st, b)}`)
+  ok(wrong.length === 0, `launch answers: each status of the API contract has its own error (${wrong.join(' ') || '13 cases'})`)
+  const ERRS = ['unknown card', 'unauthorized', 'disabled', 'forbidden', 'cooldown', 'reverted', 'misconfigured', 'rpc', 'server', 'unclear', 'network'] as const
+  for (const l of ['zh-CN', 'zh-TW', 'en'] as Lang[]) {
+    setLang(l, false)
+    const texts = ERRS.map((e) => launchErrorText({ error: e }))
+    ok(new Set(texts).size === ERRS.length && texts.every((x) => x.length > 4) && (l !== 'en' || !texts.some((x) => CJK.test(x))) && (l !== 'zh-TW' || !texts.some((x) => SIMPLIFIED_ONLY.test(x))), `${l}: every launch error has its own wording`)
+  }
+  setLang('zh-CN', false)
+  const toast = () => {
+    render()
+    return plain(region('op-toast'))
+  }
+  await fail(500, { ok: false, error: 'misconfigured' })
+  ok(op.launch?.error === 'misconfigured' && toast().includes('服务器上的私钥不是这个部署的 owner · 没有送出') && opHtml(), '500 misconfigured: the wrong key is named as such (not a network problem)')
+  await fail(403, { ok: false, error: 'forbidden' })
+  ok(toast().includes('操作员服务拒绝了这个来源') && opHtml(), '403 forbidden (origin guard): said so; operator mode stays')
+  await fail(502, { ok: false, error: 'rpc' })
+  ok(toast().includes('节点没有接受这笔交易'), '502: the node did not take it')
+  await fail(500, { ok: false, error: 'internal' })
+  ok(toast().includes('操作员服务出错 · 没有送出'), '500 internal: the service failed')
+  await fail(200, { ok: true })
+  ok(toast().includes('回应看不懂 · 若交易已送出，战情室会自动接上'), 'a 200 without a tx hash: unclear, the live war room picks it up if it went out')
+  await fail(400, { ok: false, error: 'unknown card' })
+  ok(toast().includes('这张卡不能发起'), '400: this card cannot be launched')
+  await launchCard('v2', store.proposals.values(), () => sent++, (async () => {
+    throw new Error('offline')
+  }) as unknown as typeof fetch)
+  ok(op.launch?.error === 'network' && toast().includes('连不上操作员服务'), 'no answer at all: cannot reach the operator service')
+  ok(sent === 1, 'none of the refused launches counted as sent')
+  await fail(401, { ok: false, error: 'unauthorized' })
+  ok(op.token === null && !dom.mem.has('airlock.op') && !opHtml() && plain(region('op-toast')).includes('操作员口令无效'), '401: the token is forgotten, the operator UI disappears, a notice says why')
+  op.notice = null
+  op.launch = null
+  await loadOperator(res(200, { enabled: true, auth: 'none', cards: [...LAB_IDS], cooldownBlocks: 3 }))
+  ok(opHtml(), 'local dev (auth none): the operator UI without a token')
+  await fail(403, { ok: false, enabled: false, error: 'disabled' })
+  ok(op.launch?.error === 'disabled' && !opHtml() && plain(region('op-toast')).includes('这里的操作员模式已关闭'), '403 disabled: operator mode was switched off on the server; its UI goes, a notice says why')
+  op.notice = null
+  op.launch = null
+  await loadOperator(res(200, { enabled: true, auth: 'none', cards: [...LAB_IDS], cooldownBlocks: 3 }))
+  ok(opHtml(), 'and back when the API says enabled again')
+  await loadOperator(res(404, null))
+  store.proposals.delete('10')
+  store.arrival = null
+  pickActive()
+  ok(!opHtml(), 'and gone again when the API says disabled')
+
+  // 10g. first-visit autoplay on the page: evil-drain plays from its arrival, labelled as a replay of a real proposal
+  blockTs.set(1240, blockTime(1240))
+  const realNow = Date.now
+  let NOW = realNow()
+  Date.now = () => NOW
+  try {
+    const T0 = NOW
+    lab.autoplay = 'wait'
+    lab.readyAt = 0
+    lab.interacted = false
+    lab.invite = null
+    tickLab(T0)
+    ok(lab.autoplay === 'wait' && !labPlaying(T0), 'autoplay waits a moment after the data is in')
+    render()
+    ok(labIntro(T0) && plain(region('h-head')).includes('正在载入一笔真实攻击') && !region('h-lock').includes('ph-ejected') && !region('h-lock').includes('ph-executed'), 'meanwhile the intro is up, not a final verdict')
+    NOW = T0 + AUTOPLAY_DELAY_MS + 10
+    tickLab(NOW)
+    ok(lab.autoplay === 'playing' && lab.card === 'evil-drain' && labPlaying(NOW)?.pid === '5', `autoplay: the evil-drain card plays proposal #${labPlaying(NOW)?.pid}`)
+    render()
+    const day = fmtDay(blockTime(1240))!
+    ok(plain(region('h-head')).includes(`回放 · 真实 Sepolia 提案 · ${day}`) && plain(region('t-status')).includes('回放 · Sepolia 提案 #5'), `replay label: "回放 · 真实 Sepolia 提案 · ${day}" in the hero, "回放 · Sepolia 提案 #5" in the top bar`)
+    ok(plain(region('lab')).includes(`正在回放 #5 · 真实 Sepolia 提案 · ${day}`) && region('lab').includes(`https://sepolia.etherscan.io/tx/${T('p5')}`) && region('lab').includes('class="lc k-veto on'), 'the picker says which real proposal is playing, with its proposal tx link')
+    ok(region('h-lock').includes('ph-idle') || region('h-lock').includes(' m-arrive'), 'the replay starts before the proposal arrives (outer door)')
+    ok(!labIntro(NOW) && !plain(region('h-head')).includes('正在载入一笔真实攻击'), 'the intro is gone once the replay runs')
+    ok(plain(region('h-count')).includes('提案 #5 抵达外门') || region('h-lock').includes(' m-arrive'), 'the replay lead-in says the proposal is reaching the outer door')
+    const seen = new Set<string>()
+    let vetoShot = ''
+    const curs: number[] = []
+    const chips: string[] = []
+    let vTag = 0
+    let compressed = 0
+    let lastF = -1
+    let monotonic = true
+    for (let i = 0; i < 600 && labPlaying(NOW); i++) {
+      NOW += 100
+      tickLab(NOW)
+      tickReplay(NOW)
+      const lp = labPlaying(NOW)
+      if (lp) seen.add(lp.stage)
+      const f = judgeProgress(NOW)
+      if (f !== null) {
+        if (f < lastF) monotonic = false
+        lastF = f
+      }
+      if (lp?.stage === 'judge') {
+        render()
+        const m = /CRE · ([^<]+?) (\d)\/(\d)/.exec(plain(region('h-count')))
+        if (m) chips.push(`${m[2]}/${m[3]}`)
+        if (region('v-head').includes('v-rp')) vTag++
+        if (plain(region('h-count')).includes('回放 · 时间已压缩')) compressed++
+        const pipe = region('v-pipe')
+        if (pipe.includes('pipe st-run') && pipe.includes(' seq')) curs.push((pipe.match(/class="ok"/g) ?? []).length)
+      }
+      if (lp?.stage === 'veto' && !vetoShot) {
+        render()
+        vetoShot = html()
+      }
+    }
+    ok(monotonic && lastF === 1, 'judgeProgress runs from the arrival (0) to the verdict (1)')
+    ok(curs.length > 5 && curs.every((x, i) => i === 0 || x >= curs[i - 1]) && curs[0] === 0 && Math.max(...curs) >= 3, `while CRE judges, the verdict card walks through the workflow steps one by one (${[...new Set(curs)].join(' → ')} done)`)
+    ok(['arrive', 'judge', 'veto'].every((x) => seen.has(x)) && vetoShot.includes('class="lk ph-ejected') && vetoShot.includes('pipe st-done k-veto'), `the replay walks through ${[...seen].join(' → ')} and ends ejected`)
+    ok(chips.length > 5 && chips[0] === '1/5' && new Set(chips).size >= 3 && vTag === chips.length, `phone-sized proof: the chamber chip walks the same CRE steps (${[...new Set(chips)].join(' → ')}), the verdict card says "replay"`)
+    ok(compressed === chips.length && compressed > 0, 'next to the still counter, the replay says its clock is compressed')
+    tickLab(NOW)
+    render()
+    ok(lab.autoplay === 'done' && lab.invite === 'evil-drain' && plain(region('lab')).includes('刚才是「搬走持有人的币」的真实重播') && (region('lab').match(/ nudge"/g) ?? []).length === 6, 'after the autoplay: the picker invites the viewer to pick another card')
+    ok(store.activeId === '5' && !region('h-head').includes('tag replay'), 'after the replay the screen holds the real final state of that proposal')
+    ok(plain(region('h-head')).includes(`链上状态 · 提案于 ${day}`) && !region('h-head').includes('tag live'), `and says it is a dated on-chain state ("链上状态 · 提案于 ${day}"), never live`)
+    ok(playLab('v2', NOW) && labPlaying(NOW)?.pid === '4' && lab.invite === null && lab.interacted, 'a click on a card plays it (v2 -> the executed #4) and ends the invite')
+    let exec = false
+    let ff = false
+    for (let i = 0; i < 600 && labPlaying(NOW); i++) {
+      NOW += 100
+      tickReplay(NOW)
+      if (labPlaying(NOW)?.stage === 'fast' && !ff) {
+        render()
+        ff = plain(region('h-count')).includes('冷静期快进 ×80')
+      }
+      if (labPlaying(NOW)?.stage === 'exec' && !exec) {
+        exec = true
+        render()
+        ok(region('h-lock').includes('ph-executed') && plain(html()).includes('已执行 · DemoBTC v2 上线') && region('lab').includes('st-exec'), 'v2 replay reaches the inner door: executed, the upgrade is live')
+      }
+    }
+    ok(exec, 'the v2 replay played through to its execution')
+    ok(ff, 'the fast-forwarded cooldown is marked in the chamber (冷静期快进 ×80)')
+  } finally {
+    Date.now = realNow
+  }
+
+  // 10g2. a cold visitor: the evil-drain proposal is read first, so its replay can start before the others are in;
+  // a chain that does not answer turns the intro into an honest "slow" line with the recorded run
+  {
+    ok(
+      loadOrder(['1', '2', '3', '4', '5', '6', '7', '8'], (id) => (({ '8': 'evil-drain', '2': 'evil-drain', '1': 'evil-mint', '4': 'v2' }) as Record<string, LabId>)[id] ?? null).join() === '8,1,4,7,6,5,3,2',
+      'load order: the autoplay card\'s newest proposal first, then each other card\'s newest, then the rest newest first',
+    )
+    ok(loadOrder(['3', '1'], () => null).join() === '3,1' && loadOrder([], () => null).length === 0, 'load order without picker cards: newest first')
+    const keep = { ready: playbackGate.ready, loaded: new Set(playbackGate.loaded), startedAt: playbackGate.startedAt }
+    const st = { autoplay: lab.autoplay, readyAt: lab.readyAt, interacted: lab.interacted, invite: lab.invite }
+    const drainId = pickNow('evil-drain').replay?.id ?? ''
+    playbackGate.ready = false
+    playbackGate.loaded.clear()
+    ok(!autoplayDataIn() && !historyIn(drainId) && !playLab('evil-drain', Date.now(), false), 'nothing read yet: no replay can start')
+    playbackGate.loaded.add(drainId)
+    ok(autoplayDataIn() && historyIn(drainId) && !historyIn('1'), `the autoplay proposal #${drainId} alone is enough for the first-visit replay; the other cards still wait`)
+    lab.autoplay = 'wait'
+    lab.readyAt = 0
+    lab.interacted = false
+    playbackGate.loaded.clear()
+    playbackGate.startedAt = Date.now() - INTRO_SLOW_MS - 1000
+    render()
+    ok(introSlow() && plain(region('h-head')).includes('连接 Sepolia 比较慢') && region('h-head').includes('mode=offline') && plain(region('h-count')).includes('仍在读取链上数据'), 'no answer for 12 s: the intro says the public RPCs are slow and links the recorded run (?mode=offline)')
+    playbackGate.startedAt = Date.now()
+    ok(!introSlow(), 'and not before 12 s')
+    playbackGate.ready = keep.ready
+    playbackGate.loaded.clear()
+    for (const x of keep.loaded) playbackGate.loaded.add(x)
+    playbackGate.startedAt = keep.startedAt
+    Object.assign(lab, st)
+    render()
+  }
+
+  // 10h. a card whose newest judged proposal is older than the recent ones: the backfill reads it
+  {
+    HEAD = 1400
+    NEXT = 31
+    PROPS.set(30, prop(IMPL.evilFee, 2, 1350, 1n))
+    LOGS.push(
+      mkLog(ADMIN_ABI, ADMIN, 'Proposed', { id: 30n, kind: 0, target: IMPL.evilFee, value: 0n, data: '0x', codehash: H32('c30'), readyBlock: 1375n }, 1350, T('p30'), 0),
+      mkLog(ADMIN_ABI, ADMIN, 'Vetoed', { id: 30n, guardian: RECV, ruleHash: ruleHashOf('R3_TRANSFER_CONSERVATION'), vetoCount: 1n }, 1352, T('v30'), 0),
+    )
+    const before = rpcCalls.filter((c) => c.method === 'eth_call').length
+    ok(!pickNow('evil-fee').replay, 'evil-fee has no proposal in the store yet')
+    const found = await backfillLab(31, 40)
+    const reads = rpcCalls.filter((c) => c.method === 'eth_call').length - before
+    ok(found.includes('30') && pickNow('evil-fee').replay?.id === '30' && P('30').guards.cre.rule === 'R3_TRANSFER_CONSERVATION', `backfill: older proposal #30 (EvilFee, R3) found and its logs read (${reads} eth_calls; found ${found.join(',')}; rule ${P('30')?.guards.cre.rule}; pick ${pickNow('evil-fee').replay?.id}; card ${P('30')?.card})`)
+    ok(reads <= 2 * 40 + 2, 'backfill reads at most labScanMax older ids')
+    store.proposals.delete('30')
+    resetSeen()
+  }
+  lab.card = null
+  lab.pid = null
+  replay.stop(Date.now())
+  render()
+  const css = readFileSync(join(WEB, 'src', 'style.css'), 'utf8')
+  ok(/\.no-lab \.lab \{\s*display: none;/.test(css) && /\.stage:not\(\.no-lab\):not\(\.tab-recent\) \.strip,\s*\.stage\.tab-recent \.lab \{\s*display: none;/.test(css), '?clean=1 has no picker; a stage screen shows the picker or the strip (tabs)')
+  ok(/\.lab-cards \{[^}]*grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/.test(css) && /\.lab-cards \{[^}]*grid-auto-flow: column;[^}]*overflow-x: auto/.test(css), 'stage: seven cards in a row; phone: a row of cards to swipe')
 }
 
 // ---------- 9. identity: nothing in web/ names another project or a local path ----------

@@ -1,4 +1,4 @@
-// Bundles the two self-tests for Node. The live-mode test reads a fixed fake deployment (test/fixtures/chain-data.json,
+// Bundles the self-tests for Node. The live-mode test reads a fixed fake deployment (test/fixtures/chain-data.json,
 // written by scripts/sync-sepolia-data.mjs from test/fixtures/deployment.json) instead of the shipped
 // src/chain-data-sepolia.json, which may still be a placeholder. The offline test uses the shipped recording.
 import { fileURLToPath } from 'node:url'
@@ -22,5 +22,11 @@ export default [
     input: 'test/offline-selftest.ts',
     platform: 'node',
     output: { file: 'node_modules/.cache/offline-selftest.mjs', format: 'esm' },
+  },
+  {
+    // the operator backend (operator/, functions/) against a fake Sepolia; reads the shipped deployment data
+    input: 'test/operator-selftest.ts',
+    platform: 'node',
+    output: { file: 'node_modules/.cache/operator-selftest.mjs', format: 'esm' },
   },
 ]

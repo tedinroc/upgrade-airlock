@@ -25,3 +25,6 @@ dist-ssr
 
 # npm run build:airlock output
 dist-airlock
+
+# wrangler pages dev / functions build scratch (holds absolute local paths)
+.wrangler/
