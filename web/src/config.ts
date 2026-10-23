@@ -4,7 +4,8 @@
 // URL parameters (switch at the venue without rebuilding):
 //   ?mode=airlock (default)  live: the browser reads Ethereum Sepolia directly (read only, never signs or sends)
 //   ?mode=offline            plays back the recorded run in src/recorded-run.json; opens no network connection at all
-//   ?rpc=http://127.0.0.1:19621   airlock only: read this JSON-RPC instead (a local Sepolia fork; WS on the same port)
+//   ?rpc=http://127.0.0.1:19621   airlock only: read this JSON-RPC instead (a local Sepolia fork; WS on the same port).
+//                            Loopback addresses only (127.x, localhost, [::1]); any other host is ignored
 //   ?lang=zh-CN | zh-TW | en
 //   ?p=<id>                  open on that proposal (offline: the replay loop starts with it)
 // Presenter keys: web/README.md and the on-screen help (?).
@@ -35,16 +36,19 @@ export interface ChainConfig {
 export const CONFIG = {
   defaultMode: 'airlock' as AppMode,
 
-  /** Ethereum Sepolia. The three HTTP endpoints were checked with real browser-origin requests: they answer CORS
+  /** Ethereum Sepolia. Every HTTP endpoint here was checked with real browser-origin requests: they answer CORS
    *  preflights. publicnode and drpc also serve WS (newHeads and logs subscriptions); 1rpc has no WS and caps
    *  eth_getLogs at 50 blocks, so every getLogs call stays within 50 blocks. */
   sepolia: {
     chainId: 11155111,
     ws: ['wss://ethereum-sepolia-rpc.publicnode.com', 'wss://sepolia.drpc.org'],
     http: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org', 'https://1rpc.io/sepolia'],
-    /** publicnode answers eth_getLogs older than about a day with "pruned history unavailable" (checked 2026-10-22),
-     *  so the proposals' history is read from drpc first; publicnode stays as the fallback */
-    historyHttp: ['https://sepolia.drpc.org', 'https://ethereum-sepolia-rpc.publicnode.com'],
+    /** The proposals' history (eth_getLogs from each one's proposal block). publicnode at times answers logs older
+     *  than about a day with "pruned history unavailable" (seen 2026-10-22) and drpc rate-limits a burst from one
+     *  address, so drpc is asked first, then tenderly and thirdweb (both serve the full history and answer CORS,
+     *  checked 2026-10-23); publicnode is the last resort, for recent proposals only. A failed call moves on to the
+     *  next endpoint (4 tries, so each one once). */
+    historyHttp: ['https://sepolia.drpc.org', 'https://sepolia.gateway.tenderly.co', 'https://sepolia.rpc.thirdweb.com', 'https://ethereum-sepolia-rpc.publicnode.com'],
     explorerTx: 'https://sepolia.etherscan.io/tx/',
     explorerAddr: 'https://sepolia.etherscan.io/address/',
     sourcifyApi: 'https://sourcify.dev/server/v2/contract/11155111/',

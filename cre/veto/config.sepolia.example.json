@@ -36,6 +36,8 @@
   "callGas": 1000000,
   "readGas": 200000,
   "maxCalls": 150,
+  "simRequests": 2,
+  "allowedOpcodes": [],
   "gasLimit": "2000000",
   "reportGraceBlocks": 50,
   "logConfidence": "LATEST",

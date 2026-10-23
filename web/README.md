@@ -14,9 +14,17 @@ Beside it, the **Chainlink CRE verdict** card shows the steps the workflow ran f
 words and links to the proposal tx, the report tx and the evidence hash. An upgrade goes through the attack
 simulation on 4 RPC providers and "all answers agree"; a change to the airlock itself (guardians, cooldown,
 break-glass target) gets a config check from chain reads at the proposal block instead (R7), and an upgrade stopped by
-a static rule (R5, R8) never reaches the simulation. DON consensus, the signed report and the write on chain follow
-in every case. The strip at the bottom holds the recent proposals; click one to show it. Hashes, gas costs, the
-connection and the event stream are in the **Details** drawer (`D`), hidden by default.
+a static rule (R5, R8) never reaches the simulation. In every case the workflow's consensus step (identical verdict
+and rule), the signed report and the write on chain follow. The verdicts on Sepolia so far came from the official CRE
+CLI running the workflow on a server, where the consensus step runs on one node; the same workflow and contract code
+can be deployed to a DON, where every node runs these steps and the nodes must agree before a report is signed. The
+strip at the bottom holds the recent proposals; click one to show it. Hashes, gas costs, the connection and the event
+stream are in the **Details** drawer (`D`), hidden by default.
+
+The cards keep the first veto of a proposal. Anyone can re-send a mined veto report until it expires (on Sepolia the
+forwarder is Chainlink's permissionless test forwarder); AirlockAdmin then emits `Vetoed` again, but the proposal's
+state does not change, so the re-sent copy shows up in the event stream only, never as the veto's block, transaction
+or workflow id.
 
 ## Attack picker (what a visitor sees)
 
@@ -37,9 +45,10 @@ the intro says so and links the recorded run (`?mode=offline`). During a replay 
 workflow step the verdict card is on (so a phone sees it without scrolling), notes that the clock is compressed, and
 marks the fast-forwarded cooldown (×80). After a replay the proposal's real state stays on screen, tagged with its
 date ("On-chain state · proposed <date>"), never as live. A live proposal always wins: when one arrives, any replay
-stops, auto-follow shows it and it is labelled Live; a live verdict on the newest proposal also takes the screen back
-from a picker replay. On a stage screen the picker shares the bottom row with the strip of recent proposals (two tabs);
-on a phone it is a row of cards to swipe, right under the top bar. `?clean=1` hides it (keys `1`-`7` still work).
+stops, auto-follow shows it and it is labelled Live (the "That was a real replay…" invite above the cards goes at the
+same moment); a live verdict on the newest proposal also takes the screen back from a picker replay. On a stage
+screen the picker shares the bottom row with the strip of recent proposals (two tabs); on a phone it is a row of cards
+to swipe, right under the top bar. `?clean=1` hides it (keys `1`-`7` still work).
 
 ## Run
 
@@ -48,8 +57,16 @@ npm ci
 npm run dev                     # http://127.0.0.1:5173/
 npm run build:airlock           # syncs ../deployments/sepolia.json, builds dist-airlock/
 npx vite preview --outDir dist-airlock --port 4173
-npm run typecheck && npm run selftest
+npm run typecheck && npm run selftest   # 394 checks: 282 live view and attack picker, 33 offline replay, 79 operator API
 ```
+
+394 includes 7 checks that run only when the contracts' forge build output (`../out/`, from
+`FOUNDRY_PROFILE=eth forge build` at the repo root) and `cast` are there: they compare the app's ABIs with the forge
+artifacts and its calldata with `cast calldata`. Without them those 7 are skipped and the run prints 387 `ok` lines
+(277 + 33 + 77). The CI web job has neither, so CI runs 387.
+
+The proposals' history (`eth_getLogs` from each proposal's block) is read from drpc first, then tenderly and thirdweb,
+with publicnode last (it prunes logs older than about a day); a failed call moves on to the next endpoint.
 
 ## URL parameters
 
@@ -58,9 +75,9 @@ npm run typecheck && npm run selftest
 | `?mode=airlock` | Default. Live view of Ethereum Sepolia |
 | `?mode=offline` | Replays the recorded Sepolia run (`src/recorded-run.json`) with no network connection at all |
 | `?lang=en`, `?lang=zh-CN`, `?lang=zh-TW` | Interface language (default `zh-CN`) |
-| `?p=<id>` | Opens on that proposal. Offline, the replay loop starts with it |
+| `?p=<id>` | Opens on that proposal, also one older than the recent ones (it is read too); an id the chain does not have yet says "No proposal #id". Offline, the replay loop starts with it |
 | `?clean=1` | Recording mode: no language switch, Details, `?` or key hints (the Chainlink CRE mark stays). Use it for the demo video |
-| `?rpc=http://127.0.0.1:<port>` | Reads a local Sepolia fork instead (rehearsals) |
+| `?rpc=http://127.0.0.1:<port>` | Reads a local Sepolia fork instead (rehearsals), labelled "local fork". Loopback addresses only (`127.x`, `localhost`, `[::1]`); any other host is ignored |
 | `?op=1` | Operator mode: asks for the operator token (recommended on a stage machine: the token never sits in an address) |
 | `#op=<token>` / `?op=<token>` | Operator mode: stores the operator token in this browser and removes it from the address bar (a `#` fragment never reaches the server) |
 
@@ -116,16 +133,18 @@ red a veto only; "live", the presenter toggles and every other accent are Chainl
 | `src/offline.ts`, `src/recorded-run.json` | Offline replay of the recorded run (`npm run record:run` writes it) |
 | `operator/` | Operator backend shared by the dev server and the Pages Functions: the seven cards (`cards.ts`), checks, signing and sending (`operator.ts`), Request/Response handlers (`cloud.ts`), the deployment data (`deployment.generated.ts`, written by `npm run sync:sepolia`) |
 | `functions/api/operator/` | Cloudflare Pages Functions: `GET /api/operator`, `POST /api/operator/propose` |
-| `test/` | Self-tests: live view against a fake Sepolia, offline replay with every network call trapped, the operator API against a fake Sepolia |
+| `test/` | Self-tests (`npm run selftest`, 394 checks; 387 without the forge build output in `../out/` and `cast`, as in CI): live view and attack picker against a fake Sepolia (282), offline replay with every network call trapped (33), the operator API against a fake Sepolia (79) |
 
 ## Operator mode (real attacks on Sepolia)
 
 For the person running a demo only. The page gets an operator panel that launches one of the seven cards as a real
 proposal on Ethereum Sepolia; the live war room then picks up the proposal and its Chainlink CRE verdict like any
 other. Visitors never see it: the page only asks `GET /api/operator` on a loopback host (local dev), when this browser
-already holds the operator token, or with `?op=1`, so a public visitor never calls the API at all. The panel appears
-only when the API says `enabled` and either it needs no token (the local dev server) or this browser holds the token.
-A static deploy has no API at all (`vite preview` answers `enabled: false`).
+already holds the operator token, or with `?op=1`, so a public visitor's page never calls the API at all. The panel
+appears only when the API says `enabled` and either it needs no token (the local dev server) or this browser holds the
+token. A static deploy has no API at all (`vite preview` answers `enabled: false`). The API itself is public, though:
+`GET /api/operator` tells anyone who asks whether operator mode is on, its auth kind, the card ids and the cooldown
+(nothing else); only `POST /api/operator/propose` needs the token.
 
 ### Local
 
@@ -160,8 +179,16 @@ Secrets apply from the next deployment. Deploy with `wrangler pages deploy <stat
 `functions/`, `operator/` and a `node_modules` with viem, so wrangler compiles the Functions into the Worker; check
 that `GET /api/operator` answers JSON. Then open the page once with `?op=1` and paste the token (safest on a
 projector: no address-bar suggestion can show it), or with `#op=<token>`, which never reaches the server's request log
-(`?op=<token>` works too, but does). Deleting either secret (and deploying) turns the operator off; do that after the
-event.
+(`?op=<token>` works too, but does).
+
+Deleting either secret and deploying turns the operator off on the production URL only. Cloudflare keeps every
+deployment with the secrets it was deployed with, so each older deployment's own `https://<hash>.<project>.pages.dev`
+URL keeps a working operator API with the old key and token (and a rollback to one turns it back on) until that
+deployment is deleted; a new token is no different. After the event: delete both secrets, deploy, delete every
+deployment made while the secrets were set (Cloudflare dashboard, or `wrangler pages deployment delete` in wrangler 4),
+then check that `GET https://<hash>.<project>.pages.dev/api/operator` answers 404 or `enabled: false` for each. The
+owner key itself cannot be rotated on chain (`AirlockAdmin.owner` is immutable), which is why the old deployments must
+go.
 
 ### API
 
@@ -191,7 +218,7 @@ is on chain, then shows its Chainlink CRE verdict. With `?clean=1` only `O` open
 - Before anything is sent: the key must belong to the AirlockAdmin owner (checked before any network call); the RPC
   must be Sepolia; the newest proposal must be at least 3 blocks old and the owner must have nothing pending (409); a
   dry run as the owner must not revert (422).
-- One transaction per request: EIP-1559, gas limit 1,000,000 (`proposeUpgrade` used 593,654 on Sepolia), nonce and
+- One transaction per request: EIP-1559, gas limit 1,000,000 (`proposeUpgrade` used 594,008 on Sepolia), nonce and
   fees from the node (max fee 2 x base fee + tip, tip at least 1.5 gwei, never above 500 gwei). If publicnode fails,
   drpc gets the same signed bytes, so a retry cannot send twice.
 - No response or log line carries the key, the token or a node's error text. The token check is constant-time (both

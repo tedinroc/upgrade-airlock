@@ -9,6 +9,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live demo](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
+[![Demo video](https://img.shields.io/badge/demo%20video-watch-red)](https://upgrade-airlock.pages.dev/video/)
 [![Ethereum Sepolia](https://img.shields.io/badge/Ethereum-Sepolia-627EEA?logo=ethereum&logoColor=white)](https://sepolia.etherscan.io/address/0x28e7aAC40560804F480e454bF9C12F50C83b700B)
 [![Chainlink CRE](https://img.shields.io/badge/Chainlink-CRE-375BD2?logo=chainlink&logoColor=white)](#chainlink-cre)
 
@@ -18,21 +19,21 @@
 
 ## 概览
 
-Upgrade Airlock 为每一次合约升级设置两道门。**外门**是按区块计算的冷静期；**内门**只有在以下条件全部满足后才会打开：Chainlink CRE 工作流已在四家独立的 RPC 服务商上，用模拟器对新实现发起过攻击，所有结果一致，DON 已就判决达成共识，并且一份带签名的**放行（Clear）**报告已经上链。恶意实现拿到的则是一份带签名的**否决（Veto）**，即使攻击者握有升级私钥，它也永远无法执行。本项目为 ETH Shenzhen 2026 打造，部署在 Ethereum Sepolia 上。
+Upgrade Airlock 为每一次合约升级设置两道门。**外门**是按区块计算的冷静期；**内门**只有在链上记录了放行之后才会打开。自动放行的条件是：Chainlink CRE 工作流已用模拟器对新实现发起攻击并查询了四家独立的 RPC 服务商，至少两家返回结果且所有结果一致，工作流的共识步骤（`consensusIdenticalAggregation`）已就判决达成一致，并且一份带签名的**放行（Clear）**报告已经上链。CRE 完全无法给出判决时，approver（审批人）私钥可以附上记录在案的证据手动放行；只要该提案仍在最新的 20 个 id 之内，定时扫描照样会补判，CRE 或 guardian 的否决优先。被攻击搜索覆盖到的恶意实现拿到的则是一份带签名的**否决（Veto）**，即使攻击者握有升级私钥，它也不会被执行；有边界的搜索覆盖不到的部分，由严格模式再加一道人工代码审查。目前的判决来自服务器上运行本工作流的官方 CRE CLI（`cre workflow simulate --broadcast`）；同一套工作流和合约代码可以部署到 DON 上。本项目为 ETH Shenzhen 2026 打造，部署在 Ethereum Sepolia 上。
 
 > [!TIP]
-> **在线演示：[upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)**
+> **在线演示：[upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)** · **演示视频：[upgrade-airlock.pages.dev/video](https://upgrade-airlock.pages.dev/video/)**（简体中文与英文）
 >
-> 战情室直接在浏览器里读取 Ethereum Sepolia，只读不写。每个提案都显示为一座气闸：**外门**记录提案，**气闸舱**为冷静期倒计时，**内门**始终锁住，直到 Chainlink CRE 的放行上链。一旦被否决，提案会被弹出舱外，同时列出对应的规则、证据哈希和交易。页面默认显示简体中文：[`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) 切换为英文，[`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) 切换为繁体中文。页面上的每一笔交易都收录在[线上运行证据](docs/evidence/sepolia-live.md)中。
+> 战情室直接在浏览器里读取 Ethereum Sepolia，只读不写。每个提案都显示为一座气闸：**外门**记录提案，**气闸舱**为冷静期倒计时，**内门**始终锁住，直到放行上链（Chainlink CRE 的放行，或 approver 的人工放行，战情室会标明是人工放行）。一旦被否决，提案会被弹出舱外，同时列出对应的规则、证据哈希和交易。首次打开时是攻击选择器：每张卡（六种攻击和正常升级 v2）回放同类在 Sepolia 上最新的一笔真实提案，并标明是回放。页面默认显示简体中文：[`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) 切换为英文，[`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) 切换为繁体中文。页面背后的交易（提案 #1–#10）都收录在[线上运行证据](docs/evidence/sepolia-live.md)中。
 
 ## <a id="highlights"></a>亮点
 
 - **从设计上就是 fail-closed（出错即拒绝）。** 只有链上已有放行，升级才能执行。漏掉事件日志、RPC 宕机、服务商结果不一致或运行失败，都只会让提案保持未放行或被否决：最多推迟升级，绝不会让升级通过。否决永远优先于放行。
-- **真刀真枪的攻击，而不是检查清单。** 每个 DON 节点都在四家 RPC 服务商上用 `eth_simulateV1`，基于代理合约的真实状态执行这次升级。一个持有资金的陌生地址调用新字节码中的每一个选择器，并用填入持有者地址的参数逐一调用每个新函数，再对比调用前后的总供应量、所有权和余额。至少要有两家服务商返回结果，且所有结果必须一致。
-- **判决与提案绑定。** DON 就 `{verdict, rule}` 达成共识。报告附带一份 EIP-712 签名证明，绑定提案的确切内容（`proposalDigest`）、链、接收合约和截止区块，另附一个任何人都能用链上数据重新算出的证据哈希。
-- **没有提案会漏判。** cron 定时扫描每 60 秒检查最新的 20 个提案，补判 log trigger 漏掉的所有提案，包括 approver（审批人）手动放行的升级；它的否决优先。
-- **已在 Ethereum Sepolia 上线运行。** 官方 CRE CLI 在服务器上运行这个工作流，在链上对七个提案作出了判决：一次正常升级被放行并执行，六次攻击被否决（R1、R2、R3、R3B、R7、R9）。所有合约均已在 Sourcify 上完成验证。
-- **端到端测试。** [CI](.github/workflows/ci.yml) 中运行 117 个 Foundry 测试、118 个工作流单元测试和 199 项战情室自检；另有一个分叉链端到端脚本，通过 CRE 模拟器跑通完整闭环。
+- **真刀真枪的攻击，而不是检查清单。** 工作流（部署到 DON 时在每个节点上）在四家 RPC 服务商上用 `eth_simulateV1`，基于代理合约的真实状态执行这次升级。一个持有资金的陌生地址调用新字节码中的每一个选择器，并用填入持有者地址的参数逐一调用每个新函数，再对比调用前后的总供应量、所有权和余额。至少要有两家服务商返回结果，且所有结果必须一致。
+- **判决与提案绑定。** 工作流的一致共识步骤就 `{verdict, rule}` 达成一致。报告附带一份 EIP-712 签名证明，绑定提案的确切内容（`proposalDigest`）、链、接收合约和截止区块，另附一个任何人都能用链上数据重新算出的证据哈希。
+- **漏掉的日志会被补判。** cron 定时扫描每 60 秒检查最新的 20 个提案，补判 log trigger 漏掉的所有提案，包括 approver（审批人）手动放行的升级；它的否决优先。被挤出最新 20 个 id 之外的提案不再被判定：除非 approver 已手动放行，否则它保持未放行（见[扫描窗口](docs/design.md#the-sweep-window)）。
+- **已在 Ethereum Sepolia 上线运行。** 官方 CRE CLI 在服务器上运行这个工作流，在链上对每一个提案都作出了判决（截至 2026-10-23 共十个）：一次正常升级被放行并执行，九次攻击被否决（R1、R2、R3、R3B、R7、R9）。所有合约均已在 Sourcify 上完成验证。
+- **端到端测试。** [CI](.github/workflows/ci.yml) 中运行 117 个 Foundry 测试、118 个工作流单元测试，以及 394 项战情室自检中的 387 项（其余 7 项需要 forge 编译产物和 cast，CI 任务里没有）；另有一个分叉链端到端脚本，通过 CRE 模拟器跑通完整闭环。
 
 ## 要解决的问题
 
@@ -42,7 +43,7 @@ Upgrade Airlock 为每一次合约升级设置两道门。**外门**是按区块
 - **Ankr，2022 年 12 月。** 攻击者利用泄露的部署者私钥，把 aBNBc 的实现替换为不做权限检查就能铸币的版本，铸出 60 万亿枚 aBNBc。（[Ankr 官方报告](https://www.ankr.com/blog/the-abnbc-token-report/)）
 - **Radiant Capital，2024 年 10 月。** 攻击者控制了 11 个多签签名者中的 3 个，接管借贷池的 provider 合约并升级借贷池的实现，卷走 5300 多万美元。（[rekt.news](https://rekt.news/radiant-capital-rekt2)）
 
-时间锁只是让攻击者多等一会儿，而等待期间没有人有义务去检查；延迟拉得太长，又会挡住紧急修复。Upgrade Airlock 让这段等待真正发挥作用：升级必须先通过一项独立、去中心化的检查才能执行，而这项检查会在每一个提案上自动运行。
+时间锁只是让攻击者多等一会儿，而等待期间没有人有义务去检查；延迟拉得太长，又会挡住紧急修复。Upgrade Airlock 让这段等待真正发挥作用：升级必须先通过一项独立的检查（部署到 CRE DON 后即为去中心化）才能执行，而这项检查会在每一个提案上自动运行。
 
 ## <a id="how-it-works"></a>工作原理
 
@@ -60,11 +61,11 @@ sequenceDiagram
     Note over Admin: 外门：25 个区块的冷静期，在 Sepolia 上约 5 分钟
     Admin-->>CRE: Proposed 事件日志（EVM log trigger），或每 60 秒一次的 cron 定时扫描
     CRE->>Admin: 在提案区块执行 EVM 读取
-    loop 每个 DON 节点上，逐一请求每家服务商
+    loop 每个节点上（模拟器中为一个，部署后为每个 DON 节点），逐一请求每家服务商
         CRE->>RPC: eth_getCode，然后用 eth_simulateV1 做攻击模拟
         RPC-->>CRE: 判决和规则
     end
-    Note over CRE: Quorum：至少 2 个结果且全部一致，否则以 R6 否决<br/>DON 就判决和规则达成共识<br/>证据哈希和 EIP-712 签名证明
+    Note over CRE: Quorum：至少 2 个结果且全部一致，否则以 R6 否决<br/>就判决和规则达成一致共识<br/>证据哈希和 EIP-712 签名证明
     CRE->>Fwd: writeReport
     Fwd->>Recv: onReport(metadata, report)
     alt 所有检查都通过
@@ -79,12 +80,12 @@ sequenceDiagram
 
 1. **提案。** `AirlockAdmin` 是 OpenZeppelin `ProxyAdmin` 的所有者，也是代币 `Ownable` 的所有者。owner 私钥只能提案：它永远不会是 guardian（守护者）、approver（审批人）或放行预言机。每个提案（升级，或对气闸本身的修改：guardian、冷静期、紧急暂停目标）都会记录 `readyBlock = block.number + delayBlocks`。升级目标和紧急暂停目标都必须是普通的合约代码：EIP-7702 委托账户的私钥可以在判决之后把它重新指向别处，因此一律拒绝（`DelegatedAccount`）。
 2. **判定。** CRE 的 log trigger 在 `Proposed` 事件发出时触发。对气闸本身的修改根据链上读取的数据判定（R7）。升级先过静态规则（R5、R8），再进入固定在提案区块上的攻击模拟：代理合约的 ERC-1967 实现槽被覆盖为新代码，一个全新的陌生地址（由提案区块哈希推导而来）像真实用户一样被注入资金，包括来自第二个持有者的代币和 ETH。先由持有者完成一笔转账，再由陌生地址在没有授权额度的情况下调用 `transferFrom`，然后用五种参数形式调用新字节码中找到的每一个选择器。凡是不属于标准代币接口的选择器，还会再用持有者参数调用一遍：持有资金的持有者依次填入前四个参数位置，测试金额填入另一个位置，其余位置填入陌生地址或代理合约地址。调用前后都会读取总供应量、owner 和每个受监控的余额，每次持有者参数调用之后立即读取持有者的余额，并检查每一次探测自身发出的事件（R1 至 R4、R3B）。最后扫描新字节码，找出在真实区块上与在模拟中行为不同的操作码（R9）。
-3. **达成一致。** 每个 DON 节点都在四家服务商上运行模拟。至少要有两家返回结果，且所有结果必须是同一个判决；其他情况一律否决（R6）。随后 DON 就完全相同的 `{verdict, rule}` 达成共识。
+3. **达成一致。** 每个节点（DON 部署中为每个 DON 节点；目前为 CLI 模拟器）都在四家服务商上运行模拟。至少要有两家返回结果，且所有结果必须是同一个判决；其他情况一律否决（R6）。随后共识步骤就完全相同的 `{verdict, rule}` 达成一致。
 4. **报告。** 工作流对规范化的证据 JSON 计算哈希，用 attester 私钥（CRE secret）签署一份 EIP-712 判决，再通过 forwarder 写入报告。`AirlockReceiver` 检查发送方、时效、签名，以及判决是否绑定到这一个提案（`proposalDigest`），然后在 `AirlockAdmin` 上调用 `clear`，或调用 `veto` 和 `attachReason`。
 5. **执行。** 冷静期结束后，任何人都可以调用 `execute(id)`。冷静期内会以 `TooEarly` revert，没有放行时以 `NotCleared` revert，被否决后以 `ProposalVetoed` revert；如果目标地址上的代码已不是当初提案并经过判定的那一份，则以 `CodehashChanged` revert。否决永远优先于放行。
 6. **定时扫描。** cron trigger 每 60 秒重新检查最新的提案，凡是仍待处理、CRE 尚未答复（`oracleJudged`）的提案都会被补判：log trigger 漏掉的事件、大到无法投递的 `Proposed` 事件，或 approver 手动放行的升级。它的否决优先于这次手动放行。
 
-**所有失败都指向同一个方向。** 漏掉事件日志、RPC 宕机、服务商结果不一致或运行失败，结果都是提案得不到放行或被否决：只会推迟升级，绝不会让升级通过。当 CRE 完全无法给出结果时，approver 私钥可以附上记录在案的证据手动放行；CRE 恢复后，定时扫描仍会判定这个升级，CRE 或 guardian 的否决依然优先。`breakGlass()` 允许 owner 或任一 guardian 立即把代理合约切换到事先登记的暂停实现；退出暂停状态则是一次普通升级，同样要过两道门。
+**所有失败都指向同一个方向。** 漏掉事件日志、RPC 宕机、服务商结果不一致或运行失败，结果都是提案得不到放行或被否决：只会推迟升级，绝不会让升级通过。当 CRE 完全无法给出结果时，approver 私钥可以附上记录在案的证据手动放行；CRE 恢复后，定时扫描仍会判定这个升级，CRE 或 guardian 的否决依然优先。`breakGlass()` 允许 owner 或任一 guardian 立即把代理合约切换到事先登记的暂停实现；退出暂停状态则是一次升级，同样要过两道门；已放行的提案永不过期，因此较早放行的升级也能结束暂停（见[已知限制](docs/design.md#known-limitations)）。
 
 更多细节见 [docs/design.md](docs/design.md)（威胁模型、放行状态机、报告绑定、预算）和 [cre/README.md](cre/README.md)（工作流本身）。
 
@@ -125,7 +126,7 @@ CRE 是 Upgrade Airlock 的编排层：工作流是穿过内门的唯一自动�
 | EVM 读取（`callContract`） | [`cre/veto/workflow.ts#L114-L122`](cre/veto/workflow.ts#L114-L122)、[`#L137-L142`](cre/veto/workflow.ts#L137-L142)、[`cre/veto/chain.ts`](cre/veto/chain.ts) | 读取提案、放行状态、`oracleJudged`、审批记录和余额，通过 Multicall3 在提案区块或 `LATEST` 批量读取 |
 | EVM 读取（`headerByNumber`） | [`cre/veto/workflow.ts#L125-L136`](cre/veto/workflow.ts#L125-L136) | 最新区块，以及用于推导模拟陌生地址的提案区块哈希 |
 | node mode 下的 HTTP capability | [`cre/veto/workflow.ts#L167-L189`](cre/veto/workflow.ts#L167-L189)、[`#L80-L94`](cre/veto/workflow.ts#L80-L94)、[`cre/veto/judge.ts#L157-L220`](cre/veto/judge.ts#L157-L220) | 每个节点向每家服务商先发送 `eth_getCode`，再发送一到两个 `eth_simulateV1` 请求（每个都在 120 kb 的请求上限之内） |
-| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188)，quorum 逻辑见 [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | DON 就 `{verdict, rule}` 达成共识（最多 52 字节） |
+| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188)，quorum 逻辑见 [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | 就 `{verdict, rule}` 达成一致共识（最多 52 字节；部署后为每个 DON 节点） |
 | Secrets | [`cre/veto/workflow.ts#L160-L166`](cre/veto/workflow.ts#L160-L166)、[`cre/secrets.yaml`](cre/secrets.yaml) | EIP-712 attester 私钥，每次运行只获取一次 |
 | Report + `writeReport` | [`cre/veto/workflow.ts#L143-L149`](cre/veto/workflow.ts#L143-L149)、[`cre/veto/airlock.ts#L229-L282`](cre/veto/airlock.ts#L229-L282)、[`cre/veto/report.ts`](cre/veto/report.ts) | `runtime.report`（ECDSA、keccak256）和 `evm.writeReport`，随后读回提案以确认结果 |
 | Forwarder + `IReceiver` | [`src/cre/AirlockReceiver.sol#L88-L120`](src/cre/AirlockReceiver.sol#L88-L120)、[`#L156-L169`](src/cre/AirlockReceiver.sol#L156-L169)、[`src/cre/IReceiver.sol`](src/cre/IReceiver.sol)、[`script/DeployEth.s.sol#L142`](script/DeployEth.s.sol#L142) | `onReport` 只接受配置的 forwarder，并在已配置时校验 workflow id 和 owner |
@@ -138,7 +139,7 @@ CRE 是 Upgrade Airlock 的编排层：工作流是穿过内门的唯一自动�
 
 ## <a id="live-on-sepolia"></a>Sepolia 链上运行
 
-Ethereum Sepolia，chain id 11155111。合约通过 [`script/DeployEth.s.sol`](script/DeployEth.s.sol) 在区块 11950682 部署（13 笔交易），均已在 Sourcify 上完成验证。owner、approver、紧急 guardian 和 attester 是四把不同的私钥。冷静期为 25 个区块。
+Ethereum Sepolia，chain id 11155111。合约通过 [`script/DeployEth.s.sol`](script/DeployEth.s.sol) 在区块 11950684–11950699 部署（13 笔交易；AirlockAdmin 位于区块 11950697），均已在 Sourcify 上完成验证。owner、approver、紧急 guardian 和 attester 是四把不同的私钥。冷静期为 25 个区块。
 
 | 合约 | 地址 |
 |---|---|
@@ -156,7 +157,7 @@ Ethereum Sepolia，chain id 11155111。合约通过 [`script/DeployEth.s.sol`](s
 | PausedImpl（紧急暂停目标） | [`0xb6573006fB607E96966d0F578B96AAB25413F5BE`](https://sepolia.etherscan.io/address/0xb6573006fB607E96966d0F578B96AAB25413F5BE) |
 | Chainlink MockKeystoneForwarder | [`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://sepolia.etherscan.io/address/0x15fC6ae953E024d975e77382eEeC56A9101f9F88) |
 
-七个提案，七个链上判决。每个链接上的区块号是该交易所在的区块；`(+n)` 表示 CRE 判决在提案之后第几个区块到达。
+第一轮运行：七个提案，七个链上判决（之后的 #8–#10 列在 [docs/evidence/sepolia-live.md](docs/evidence/sepolia-live.md) 中）。每个链接上的区块号是该交易所在的区块；`(+n)` 表示 CRE 判决在提案之后第几个区块到达。
 
 | 卡片 | 提案 | CRE 判决 | 提案交易 | 报告交易 | 后续 |
 |---|---|---|---|---|---|
@@ -194,7 +195,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 个测试：规则、探测、字节码、报告、预算、handler
 
 # 战情室
-(cd web && npm ci && npm run selftest)            # 199 项检查：实时视图和离线回放
+(cd web && npm ci && npm run selftest)            # 394 项检查：实时视图与攻击选择器、离线回放、操作员 API
 ```
 
 ### 在 Sepolia 分叉链上端到端运行
@@ -212,7 +213,7 @@ cre/scripts/fork-e2e.sh         # 在本地 anvil 分叉的 Sepolia 上运行：
 
 ### Sepolia 运维工具包
 
-[`scripts/sepolia/`](scripts/sepolia/README.md) 用于运行线上演示。私钥存放在仓库之外：`KEY_DIR` 中每个文件存一把十六进制私钥（`owner`、`attester`、`sender`、`approver`、`emergency`）；脚本从不打印私钥，而且只有当 owner、approver、紧急 guardian 和 attester 是四把不同的私钥时，`deploy.sh` 才会执行部署。每个脚本也都能通过 `FORK=<port>` 在本地分叉链上运行，整套演示可以零成本彩排。
+[`scripts/sepolia/`](scripts/sepolia/README.md) 用于运行线上演示。私钥存放在仓库之外：`KEY_DIR` 中每个文件存一把十六进制私钥（`owner.key`、`attester.key`、`sender.key`、`approver.key`、`emergency.key`，另可选 `sweeper.key`）；脚本从不打印私钥，而且只有当 owner、approver、紧急 guardian 和 attester 是四把不同的私钥时，`deploy.sh` 才会执行部署。每个脚本也都能通过 `FORK=<port>` 在本地分叉链上运行，整套演示可以零成本彩排。
 
 ```bash
 scripts/sepolia/deploy.sh                    # 13 笔交易，写出 deployments/sepolia.json（FORCE=1 时替换已有部署）
@@ -235,7 +236,7 @@ npm run dev                     # http://127.0.0.1:5173/
 npm run build:airlock           # 把 deployments/sepolia.json 同步进页面，构建 web/dist-airlock
 ```
 
-战情室直接读取 Sepolia，从不签名，也从不发送交易。它把每个提案显示为一座气闸：冷静期、CRE 放行，以及附带规则和证据的否决。
+页面直接读取 Sepolia，不持有私钥，从不签名，也从不发送交易。它把每个提案显示为一座气闸：冷静期、CRE 放行，以及附带规则和证据的否决。访客可以从七张卡（六种攻击和正常升级 v2）中选一张，观看同类在 Sepolia 上最新一笔真实提案的回放（画面标明是回放；该攻击正处于冷静期时，则显示那笔实时提案），见[攻击选择器](web/README.md#attack-picker-what-a-visitor-sees)。演示者另有一个操作员模式（`web/operator/`、`web/functions/`）：在开发服务器上只接受本机连接；在 Cloudflare Pages 上要凭口令，而且只有 `OWNER_KEY` 和 `OPERATOR_TOKEN` 两个 secret 都存在时才会开启。它通过 `POST /api/operator/propose` 发出同样七种固定提案之一，由服务器端用 owner 私钥签名（设计本来就假设这把私钥会泄露：它只能提案）；公众访客的页面从不调用它，见[操作员模式](web/README.md#operator-mode-real-attacks-on-sepolia)。
 
 | URL 参数 | 作用 |
 |---|---|
@@ -243,8 +244,9 @@ npm run build:airlock           # 把 deployments/sepolia.json 同步进页面�
 | `?mode=offline` | 完全不联网，回放一次录制好的运行 |
 | `?lang=en`、`?lang=zh-TW`、`?lang=zh-CN` | 界面语言（默认 `zh-CN`；按 `L` 键循环切换） |
 | `?rpc=http://127.0.0.1:<port>` | 改为读取本地 Sepolia 分叉链，用于彩排 |
+| `?op=1` | 操作员模式：要求输入操作员口令（仅供演示者） |
 
-在实时模式下按 `P`，即可根据链上事件回放最近的提案。
+在实时模式下按 `P`，即可根据链上事件回放最近的提案；按 `1` 到 `7` 回放选择器上对应的攻击卡。
 
 ## 仓库结构
 
@@ -266,6 +268,7 @@ cre/scripts/fork-e2e.sh         在 anvil 分叉的 Sepolia 上端到端运行
 cre/setup.sh                    固定版本的 CRE CLI 和 bun
 scripts/sepolia/                线上演示的运维工具包，附带服务器用的 systemd 单元
 web/                            战情室（Vite、TypeScript、viem）
+web/operator/, web/functions/   操作员模式：服务器端签名的七种固定提案（开发服务器、Pages Functions）
 deployments/sepolia.json        线上部署记录
 docs/design.md                  威胁模型、放行状态机、报告绑定、预算
 docs/evidence/                  录制的线上运行记录
@@ -287,7 +290,7 @@ Upgrade Airlock 假定 owner 私钥会泄露，并据此设计：单凭 owner �
 
 各角色之间绝不重叠。如果 owner 同时是 approver、guardian 或放行预言机，`AirlockAdmin` 的构造函数会直接拒绝（`RoleOverlap`）；`DeployEth` 也只有在 owner、approver、紧急 guardian 和 attester 是四个不同地址时才会部署。
 
-**泄露的 owner 私钥可以提案。** 但每个提案都要在公开状态下等完冷静期，同时接受 CRE 的判定，还需要一份 owner 无法自己给出的放行。owner 也可以拉下紧急制动（`breakGlass`），但这只会把代理合约切换到事先登记的暂停实现；要退出暂停状态，就得走一次过两道门的升级。
+**泄露的 owner 私钥可以提案。** 但每个提案都要在公开状态下等完冷静期，同时接受 CRE 的判定，还需要一份 owner 无法自己给出的放行。owner 也可以拉下紧急制动（`breakGlass`），但这只会把代理合约切换到事先登记的暂停实现；要退出暂停状态，就得走一次过两道门的升级，而较早放行却从未执行的升级也能结束暂停。
 
 **同一把私钥无法：**
 
@@ -297,6 +300,8 @@ Upgrade Airlock 假定 owner 私钥会泄露，并据此设计：单凭 owner �
 - 伪造或重放判决：`AirlockReceiver` 只接受满足以下条件的报告：来自配置的 forwarder、由 attester 签名、不晚于其 `validUntilBlock`，并且绑定到本链、本接收合约上该提案的 `proposalDigest`。
 
 approver 的手动放行是 CRE 无法给出结果时的人工兜底：只要该提案仍在最新的 20 个 id 之内，定时扫描照样会判定它，而且 CRE 或 guardian 的否决优先。完整的威胁模型见 [docs/design.md](docs/design.md#threat-model)。
+
+这些是测试网演示合约，存在已知限制，每一项都有一个通过的测试固定下来：放行永不过期；owner 私钥无法轮换（被盗的私钥可以在每次解除暂停后再次暂停代币）；一个恶意 guardian 就能让代币一直保持暂停。完整列表见 [docs/design.md](docs/design.md#known-limitations)。
 
 ## 技术栈
 

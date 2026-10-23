@@ -80,11 +80,13 @@ echo $$ >"$PIDF"
 # RESTART_SECS (default 5); a proposal that arrives in the gap stays Pending without a clearance until sweep.sh
 # judges it. AIRLOCK_RESTART=0 exits instead (with the simulator's exit status).
 while :; do
-  # The keys go to the simulator's environment only (never to its arguments or the log).
-  env "$(attester_env)=$ATTESTER_PK" CRE_ETH_PRIVATE_KEY="$SENDER_PK" \
-    "$SIM" workflow simulate ./veto -T "$TARGET" "${CONFIG_ARGS[@]}" ${WASM_ARGS[@]+"${WASM_ARGS[@]}"} \
-    --non-interactive --trigger-index 0 --listen --broadcast \
-    > >(tee -a "$LOG") 2>&1 &
+  # The keys go to the simulator's environment only (never to any process's arguments, or to the log): the subshell
+  # exports them with the shell builtin, then becomes the simulator (exec), so $! is the simulator's pid.
+  (
+    export "$(attester_env)=$ATTESTER_PK" CRE_ETH_PRIVATE_KEY="$SENDER_PK"
+    exec "$SIM" workflow simulate ./veto -T "$TARGET" "${CONFIG_ARGS[@]}" ${WASM_ARGS[@]+"${WASM_ARGS[@]}"} \
+      --non-interactive --trigger-index 0 --listen --broadcast
+  ) > >(tee -a "$LOG") 2>&1 &
   SPID=$!
   say "airlock listening (simulator pid $SPID); log $LOG"
   set +e

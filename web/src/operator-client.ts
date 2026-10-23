@@ -10,11 +10,13 @@
 //                fragment is never sent to the server, so it stays out of request logs
 //   ?op=<token>  the same, as a query (it does reach the server's request log once, and the browser's history)
 // Offline playback and a local fork (?rpc=) never ask the API: their screen is not Ethereum Sepolia. Neither does a
-// public visitor: the API is only asked on a loopback host (local dev) or when this browser holds a token or ?op=1
-// asked for one, so a static deploy logs no 404 and the public never learns whether operator mode is on.
+// public visitor's page: the API is only asked on a loopback host (local dev) or when this browser holds a token or
+// ?op=1 asked for one, so a static deploy logs no 404 and a visitor's page never calls the API or draws anything of
+// operator mode. GET /api/operator itself is public, though: anyone who requests it learns whether operator mode is
+// on, its auth kind, the card ids and the cooldown (nothing else). Launching needs the operator token.
 //
 // API contract:
-//   GET  /api/operator          -> {enabled, auth: 'none'|'token', cards: string[], cooldownBlocks}
+//   GET  /api/operator          -> {enabled, auth: 'none'|'token', cards: string[], cooldownBlocks} (public, no token)
 //   POST /api/operator/propose  {card} (+ Authorization: Bearer <token> when auth is 'token')
 //        200 {ok, card, txHash} | 400 unknown card | 401 unauthorized | 409 cooldown (retryAfterBlocks) | 502 rpc
 //        and from the operator service also 403 disabled (operator off) | 403 forbidden (origin/host guard) |

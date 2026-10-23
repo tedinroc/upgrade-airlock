@@ -267,6 +267,12 @@ export function labIntro(now = Date.now()): boolean {
 /** Called every frame: starts the first-visit replay when it may, and notices when it ended. Returns whether the
  *  page must redraw. */
 export function tickLab(now = Date.now()): boolean {
+  // a live proposal on screen ends the invite: "That was a real replay…" must never sit next to a live attack (a live
+  // arrival from anywhere else, the CLI or another device, takes the screen without the viewer touching the page)
+  if (lab.invite && isLiveNow(store.active, now)) {
+    lab.invite = null
+    return true
+  }
   if (lab.autoplay === 'playing') {
     const lp = labPlaying(now)
     if (lp && lp.id === lab.card) {

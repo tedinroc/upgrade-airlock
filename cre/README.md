@@ -15,10 +15,11 @@ cron, default every 60 s ── handler 1: sweeper (newest 20 ids) ─┤
  EVM reads, batched through Multicall3: getProposal + clearanceOf + oracleJudged at LATEST;
    approvals, holder balances, delay at the proposal block; the proposal block's hash (header by number)
  kinds 1-3 (guardian / delay / paused impl): R7 from those reads
- kind 0 (upgrade): R5 strict codehash, R8 init data, a funded holder; then node mode: every DON node
+ kind 0 (upgrade): R5 strict codehash, R8 init data, a funded holder; then node mode: every node (each DON node
+   when deployed to a DON; the CLI simulator today)
    attack-simulates the upgrade on each RPC provider (eth_getCode, then 1 to simRequests eth_simulateV1 requests)
    -> R1-R4, R3B, R9; quorum: at least minAgree answers and all equal, otherwise R6 (fail closed)
- DON identical consensus on {verdict, rule}
+ identical consensus on {verdict, rule} (across the DON's nodes in a DON deployment)
  evidence JSON -> evidenceHash; EIP-712 attestation (CRE secret); runtime.report -> writeReport
    -> (Mock)KeystoneForwarder -> AirlockReceiver.onReport
         pass -> AirlockAdmin.clear(id, evidenceHash)
@@ -105,8 +106,10 @@ evidenceHash   = keccak256 of the canonical JSON (sorted keys, schema upgrade-ai
 validUntilBlock = max(readyBlock, current block) + reportGraceBlocks   (blocks, never a clock)
 ```
 
-The DON agrees only on `{verdict, rule}`. Per-provider answers, failed checks, culprit selectors and new opcodes are
-in the node logs. Everything in the evidence is on chain, so `veto/tools/check-evidence.ts` recomputes each hash.
+The consensus step (the DON, in a DON deployment) agrees only on `{verdict, rule}`. Per-provider answers, failed checks, culprit selectors and new opcodes are
+in the node logs. Everything in the evidence is on chain, so `veto/tools/check-evidence.ts` recomputes each hash:
+`bun veto/tools/check-evidence.ts <rpc> ../deployments/sepolia.json` (it reads the logs in 10,000-block windows; on
+live Sepolia give it an RPC that keeps old logs, such as https://sepolia.gateway.tenderly.co).
 
 ## Staying inside CRE's per-run limits
 
@@ -117,7 +120,7 @@ in the node logs. Everything in the evidence is on chain, so `veto/tools/check-e
 | ChainRead 15 calls (headerByNumber counts too) | Multicall3 batches. Sweeper: latest header 1, nextId 1, scan of 20 ids 4 (getProposal, clearanceOf, oracleJudged), then 3 per upgrade (reads at the proposal block, block hash, confirmation) and 2 per config change. Every judgement checks the remaining budget first; the rest waits for the next run. `sweepWindow` is capped at 30 (scan 6), which leaves room for an upgrade and two config changes; a budget that still runs out ends the run with a log line, never an error. Log path: 5. |
 | ChainRead payload 5 kb | Each batch's request and response stay under 4096 bytes. Init data is never read: R8 needs only `dataHash`. |
 | HTTP 15 calls | One simulation is `eth_getCode`, then 1 to `simRequests` (default 2) `eth_simulateV1` requests per provider: at most 12 calls with four providers, 15 with five. The config refuses `rpcs x (1 + simRequests)` over 15. At most one simulation per run; static and config verdicts need no HTTP. |
-| HTTP request 120 kb, response 250 kb | Each `eth_simulateV1` request holds at most `maxCalls` calls and at most 88,000 bytes of JSON (117,336 once base64-encoded). Probes = 2 fallback + 5 base shapes per selector + 24 placement probes per **new** selector (each placement probe carries one holder and one stranger balance read). The demo token (16 selectors) is 130 probes; at `maxCalls` 150 it goes out as two requests (148 calls / 40.0 kB JSON / 53.3 kB base64 and 127 calls / 33.0 kB / 44.0 kB) — well inside 120 kb. A drain variant (even the 4-argument `rescueTokens`) adds one drain selector, so it measures the same. `bun tools/measure-requests.ts` prints these. |
+| HTTP request 120 kb, response 250 kb | Each `eth_simulateV1` request holds at most `maxCalls` calls and at most 88,000 bytes of JSON (117,336 once base64-encoded). Probes = 2 fallback + 5 base shapes per selector + 24 placement probes per **new** selector (each placement probe carries one holder and one stranger balance read). DemoBTCV2 and EvilDrain (16 extracted selectors, including `0x0000001f`, a length-check constant from the solc dispatcher that the selector walker over-includes and probes harmlessly; v1 has 15) are 130 probes; at `maxCalls` 150 it goes out as two requests (148 calls / 40.0 kB JSON / 53.3 kB base64 and 127 calls / 33.0 kB / 44.0 kB) — well inside 120 kb. A drain variant (even the 4-argument `rescueTokens`) adds one drain selector, so it measures the same. `bun tools/measure-requests.ts` prints these. |
 | Log event 5 kb | A Proposed log with large init data is not delivered; the sweeper judges it from `getProposal`. |
 | Log line 1 kb, secrets 5 calls | Lines are clipped; the attester key is fetched once per run. |
 | Cron at least 30 s | Default `0 * * * * *` (every minute). |
@@ -181,7 +184,7 @@ Notes found while building:
 | `callGas`, `readGas` | Gas per simulated call and per simulated read |
 | `maxCalls`, `simRequests` | Simulated calls per `eth_simulateV1` request (80-400, default 250) and requests per provider (1-4, default 2) |
 | `allowedOpcodes` | R9 opcodes that do not veto, by name (default none) |
-| `gasLimit` | Gas for forwarder -> receiver -> AirlockAdmin |
+| `gasLimit` | Gas for forwarder -> receiver -> AirlockAdmin (default 2,000,000; a Veto report used up to about 524k in the fork end-to-end run, a Clear about 397k) |
 | `reportGraceBlocks` | Report validity after max(readyBlock, current block) |
 | `logConfidence` | `LATEST` only |
 | `sweepSchedule`, `sweepWindow` | Sweeper cron (default every 60 s) and how many of the newest ids it scans (default 20, at most 30) |

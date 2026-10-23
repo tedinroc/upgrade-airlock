@@ -46,7 +46,7 @@ approver key, the emergency guardian key or the attester secret, and does not co
 | Weaken the airlock first: remove the CRE receiver as a guardian, shorten the delay, swap the break-glass target | Every change to the airlock is itself a proposal and passes both doors; R7 vetoes it without the approver's pre-approval |
 | Forge a verdict through the forwarder used in simulation (the MockKeystoneForwarder is permissionless) | Every report carries an EIP-712 signature by the attester; the receiver recovers it |
 | Reuse a Clear for other content: another proposal, another chain history, another implementation | The signed `proposalDigest` must equal `AirlockAdmin.proposalDigest(id)` |
-| Keep a Clear for later | `validUntilBlock` is signed; a Clear only applies to a pending proposal and the first evidence hash is kept |
+| Keep a Clear for later | `validUntilBlock` bounds when a signed report can be delivered; a Clear only applies to a pending proposal and the first evidence hash is kept. A clearance that has been recorded does not expire ([known limitations](#known-limitations)) |
 | Run or bribe an RPC provider | Every answering provider must agree and at least two must answer, so a single bad provider can cause a veto (R6, a delay), never a pass |
 
 ## Two doors and the clearance state machine
@@ -85,7 +85,8 @@ A proposal has a status (`None`, `Pending`, `Vetoed`, `Executed`) and, while it 
 - **Every kind needs a clearance**, not only upgrades: guardian, delay and break-glass target changes pass both
   doors too.
 - **Break glass.** `breakGlass()` (owner or any guardian) switches the proxy to the pre-registered paused
-  implementation at once, without a proposal. Leaving the paused state is an ordinary upgrade through both doors.
+  implementation at once, without a proposal. Leaving the paused state is an upgrade through both doors. A cleared
+  proposal never expires, so an earlier cleared upgrade can also end the pause ([known limitations](#known-limitations)).
 
 The CRE workflow answers every proposal it judges: a pass becomes a Clear, a failed check a Veto. A proposal no
 verdict has reached simply has no clearance. That is the property the whole design rests on:
@@ -136,7 +137,8 @@ Judging one proposal:
    delay change needs it only when it shortens the delay.
 3. **Upgrades (kind 0): static rules.** R5 in strict mode (the codehash must be approved, see
    [the two modes](#two-modes-automatic-and-strict)), R8 for init data, and a funded holder must exist.
-4. **Upgrades: the attack simulation, in node mode.** Every DON node sends every configured provider
+4. **Upgrades: the attack simulation, in node mode.** Every node (every DON node in a DON deployment; the CLI
+   simulator today) sends every configured provider
    `eth_getCode(newImpl)` pinned to the proposal block (the code must hash to the proposed codehash, else R6), then
    the simulation in at most `simRequests` (default 2) `eth_simulateV1` requests of at most `maxCalls` calls and
    88,000 bytes each, all with the proxy's implementation slot overridden and the stranger given 1 ETH. Every
@@ -276,7 +278,7 @@ CRE limits every workflow run (`cre workflow limits export`). The workflow plans
 | ChainRead calls | 15 per run | Reads go through Multicall3 in batches. Log path: 5 calls for an upgrade (latest header, proposal state, reads at the proposal block, the proposal block's header, the confirmation), 4 for a config change. Sweeper: 1 header, 1 `nextId`, 4 for the 20-id scan (`getProposal`, `clearanceOf`, `oracleJudged`; `sweepWindow` is capped at 30), then 3 per upgrade and 2 per config change. Each judgement checks the remaining budget first and defers when it does not fit; a budget that still runs out ends the run with a log line |
 | ChainRead payload | 5 kb | Each batch's request and response stay under 4,096 bytes. Init data is never read: R8 needs only `dataHash` |
 | HTTP calls | 15 per run | 1 + `simRequests` per provider: 12 with the four Sepolia providers; the config refuses more than 15. One attack simulation per run; static and config verdicts need no HTTP |
-| HTTP request size | 120 kb | Each `eth_simulateV1` request holds at most `maxCalls` calls and 88,000 bytes of JSON (117,336 base64-encoded). A placement probe takes three calls (the probe and two balance reads). At the live `maxCalls` of 150, EvilDrain's 130 probes (16 selectors, 2 outside the standard interface) go out as two requests |
+| HTTP request size | 120 kb | Each `eth_simulateV1` request holds at most `maxCalls` calls and 88,000 bytes of JSON (117,336 base64-encoded). A placement probe takes three calls (the probe and two balance reads). At the live `maxCalls` of 150, EvilDrain's 130 probes (16 extracted selectors, 2 outside the standard interface: `rescue()` `0x20ff430b` and `0x0000001f`, a length-check constant from the solc dispatcher that the selector walker over-includes and probes harmlessly) go out as two requests |
 | Consensus observation | 25 kb | `{verdict, rule}`, at most 52 bytes |
 | Log trigger event size | 5 kb | A larger `Proposed` event is left to the sweeper |
 | Cron interval | at least 30 s | every 60 s |
@@ -287,3 +289,23 @@ CRE limits every workflow run (`cre workflow limits export`). The workflow plans
 On chain, a report runs under a 2,000,000 gas limit. In the fork end-to-end run (an anvil fork of Sepolia, which
 charges what live Sepolia charges), a Veto report (`onReport`, `veto`, `attachReason`) used 426,000 to 524,000 gas,
 a Clear report 191,000 to 397,000, and `execute` of the v2 upgrade, codehash recheck included, 70,000.
+
+## Known limitations
+
+These are testnet demo contracts. Each limitation below is pinned by a passing test in
+[`test/known-issues/KnownIssues.t.sol`](../test/known-issues/KnownIssues.t.sol) that asserts today's behaviour; a
+version that removes one replaces its test with a test of the protection.
+
+| Limitation | Test |
+|---|---|
+| A matured, cleared, never-executed upgrade can end a `breakGlass` in the same block: anyone may `execute` it | `test_knownIssue_staleProposalUndoesBreakGlassInstantly` |
+| Clearances never expire and execution order is free, so an older cleared proposal can roll the code back at any later time | `test_knownIssue_staleProposalRollback` |
+| `owner`, `approver` and `clearanceOracle` are immutable, and ProxyAdmin cannot leave AirlockAdmin: there is no key rotation or migration | `test_knownIssue_noMigrationPath` |
+| A stolen owner key can re-pause after every unpause. It can freeze the token, but it cannot steal | `test_knownIssue_stolenOwnerRepausesForever` |
+| The same key can raise the delay to 50,400 blocks, which R7 treats as not weakening ([`judgeConfig`](../cre/veto/judge.ts#L122-L129)), so every later unpause waits that long while the key re-pauses at will | `test_knownIssue_raiseDelayThenPause` |
+| A single rogue guardian can keep the token paused forever by vetoing every exit, including the proposal that removes it: a veto always wins | `test_knownIssue_singleGuardianPermanentFreeze` |
+| An unpause is an upgrade, so it needs a clearer: while the oracle is down and the approver is unreachable, a paused token stays paused | `test_knownIssue_unpauseNeedsAClearer` |
+| A mistaken manual clearance of a reinitializer runs as proposed: `execute` checks the codehash, never the approval registry or the init data | `test_knownIssue_clearedReinitializerHandsOwnership` |
+| The approver's clearance lets a proposal run after the cooldown when no CRE verdict has landed, and for good once the proposal is below [the sweep window](#the-sweep-window) | `test_knownIssue_approverClearanceRunsWithoutOracleVerdict` |
+
+A production version would add key rotation or a migration path and an expiry for clearances.

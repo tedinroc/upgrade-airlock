@@ -388,8 +388,12 @@ function renderHero(p: Proposal | null, v: AirlockView, now: number, intro: bool
     patch('h-head', `<div class="h-eyebrow"><span>${esc(t('h.introEyebrow'))}</span><span class="tag replay">${I.play}${esc(t('h.replayReal'))}</span></div>` + body)
   } else if (!p) {
     const n = delayBlocks()
-    const head = PENDING ? (OFFLINE ? t('h.noRecording') : t('h.pending')) : OFFLINE || chainHealth.loadedRecent ? t('h.empty') : t('h.loading')
-    patch('h-head', `<div class="h-eyebrow">&nbsp;</div><h1 class="h-title">${esc(head)}</h1><p class="h-desc">${esc(t('h.emptyDesc', { n, t: fmtDur(n * CONFIG.blockSec) }))}</p>`)
+    // ?p=<id> of a proposal the chain does not have (yet): say so, never "the airlock is empty"
+    const missing = !OFFLINE && !PENDING && !!chainHealth.pickMissing && store.activeId === chainHealth.pickMissing ? chainHealth.pickMissing : null
+    const newest = store.newestId()
+    const head = PENDING ? (OFFLINE ? t('h.noRecording') : t('h.pending')) : missing ? t('h.noSuch', { id: missing }) : OFFLINE || chainHealth.loadedRecent ? t('h.empty') : t('h.loading')
+    const desc = missing && newest ? t('h.noSuchDesc', { id: missing, n: newest }) : t('h.emptyDesc', { n, t: fmtDur(n * CONFIG.blockSec) })
+    patch('h-head', `<div class="h-eyebrow">&nbsp;</div><h1 class="h-title">${esc(head)}</h1><p class="h-desc">${esc(desc)}</p>`)
   } else {
     // a replay says it is one (live mode: of a real Sepolia proposal, with its date); a proposal happening now says live
     const tag = RF

@@ -25,7 +25,7 @@ import { ADMIN_ABI, RECEIVER_ABI } from '../src/abi'
 import { airlockView, fmtClock, fmtDur, startTitle } from '../src/airlock'
 import { blocks } from '../src/chain'
 import { DATA, PENDING, type RawLog } from '../src/chaindata'
-import { backfillLab, chainHealth, loadOrder, startChainWatch, TOPICS } from '../src/chainwatch'
+import { backfillLab, chainHealth, loadOrder, loadPicked, startChainWatch, TOPICS } from '../src/chainwatch'
 import { CONFIG } from '../src/config'
 import { HELP_ROWS, keyAction, labIndexOfKey, stepId, type Action } from '../src/controls'
 import { explorerUrl, fmtEth, fmtGasPrice, realWorkflowId } from '../src/derive'
@@ -74,7 +74,7 @@ import {
   takeTokenFromUrl,
   tokenFromUrl,
 } from '../src/operator-client'
-import { CHAIN, chainWithRpc, CLEAN, FORK, GUARDS, isLoopback, MODE, OFFLINE, parseClean, parsePick, parseRpcOverride, pickMode } from '../src/runtime'
+import { CHAIN, chainWithRpc, CLEAN, FORK, GUARDS, isLoopback, MODE, OFFLINE, parseClean, parsePick, parseRpcOverride, pickMode, rpcOverrideOf } from '../src/runtime'
 import { newProposal, store, type Proposal } from '../src/store'
 import { ruleHashOf } from '../src/types'
 import { launchErrorText } from '../src/lab-ui'
@@ -112,6 +112,23 @@ ok(isLoopback('http://127.0.0.1:19621') && isLoopback('http://localhost:8545') &
 {
   const fork = chainWithRpc(CONFIG.sepolia, 'http://127.0.0.1:19621')
   ok(fork.http.join() === 'http://127.0.0.1:19621' && fork.ws.join() === 'ws://127.0.0.1:19621' && fork.explorerTx === null && fork.sourcifyApi === null, 'local fork: one endpoint (HTTP + WS on the same port), no explorer, no Sourcify')
+  // ?rpc= is for a local fork only: a link to the public site must never make it read (and call "Live · Ethereum
+  // Sepolia") someone else's JSON-RPC. FORK is exactly "rpcOverrideOf(?rpc=) !== null".
+  ok(
+    rpcOverrideOf('http://127.0.0.1:19621/') === 'http://127.0.0.1:19621' && rpcOverrideOf('http://localhost:8545') === 'http://localhost:8545' &&
+      ['https://evil.example', 'https://sepolia.drpc.org', 'http://127.0.0.1.evil.example:8545', 'javascript:alert(1)', '', null].every((x) => rpcOverrideOf(x) === null) &&
+      rpcOverrideOf('http://127.0.0.1:19621', true) === null,
+    '?rpc= override: loopback addresses only; any other host (or offline mode) is ignored, so FORK stays off',
+  )
+  ok(
+    CHAIN.historyHttp.length === 4 && CHAIN.historyHttp.every((u) => u.startsWith('https://')) && CHAIN.historyHttp[0] === 'https://sepolia.drpc.org' && CHAIN.historyHttp[3] === 'https://ethereum-sepolia-rpc.publicnode.com' && new Set(CHAIN.historyHttp).size === 4,
+    `proposal history from ${CHAIN.historyHttp.length} endpoints: drpc first, publicnode (prunes old logs) last`,
+  )
+  const evil = chainWithRpc(CONFIG.sepolia, rpcOverrideOf('https://evil.example'))
+  ok(
+    evil.http.length === 3 && evil.http.join() === CONFIG.sepolia.http.join() && evil.ws.join() === CONFIG.sepolia.ws.join() && evil.historyHttp.join() === CONFIG.sepolia.historyHttp.join() && !evil.http.some((u) => u.includes('evil')),
+    '?rpc=https://evil.example: the page keeps reading the 3 Sepolia endpoints',
+  )
 }
 
 // ---------- 2. ABI against the forge artifacts (FOUNDRY_PROFILE=eth forge build) ----------
@@ -737,6 +754,41 @@ setLang('zh-CN', false)
   setLang('zh-CN', false)
 }
 
+// ---------- 8g. a re-sent veto report: anyone may re-send a mined report until it expires; the first veto stays ----------
+{
+  const NOHOOK = { wantReceipt() {}, wantBlockTs() {}, refresh() {}, onLive() {} }
+  const EVX = H32('evidence #40')
+  const WFX = H32('a workflow id the re-sender chose')
+  const R1 = ruleHashOf('R1_TOTAL_SUPPLY')
+  // one report transaction: the receiver's Verdict, then AirlockAdmin's Vetoed and ReasonAttached
+  const report = (b: number, tx: Hex, wf: Hex) => [
+    mkLog(RECEIVER_ABI, RECV, 'Verdict', { proposalId: 40n, action: 0, ruleHash: R1, evidenceHash: EVX, workflowId: wf }, b, tx, 0),
+    mkLog(ADMIN_ABI, ADMIN, 'Vetoed', { id: 40n, guardian: RECV, ruleHash: R1, vetoCount: 1n }, b, tx, 1),
+    mkLog(ADMIN_ABI, ADMIN, 'ReasonAttached', { id: 40n, guardian: RECV, reportHash: EVX }, b, tx, 2),
+  ]
+  const proposed = mkLog(ADMIN_ABI, ADMIN, 'Proposed', { id: 40n, kind: 0, target: IMPL.evilMint, value: 0n, data: '0x', codehash: H32('c40'), readyBlock: 1525n }, 1500, T('p40'), 0)
+  const first = report(1502, T('v40'), WF)
+  const again = report(1530, T('v40 re-sent'), WFX)
+  const check = (label: string) => {
+    const v = airlockView(P('40'), 1600)
+    const a = P('40').guards.cre
+    ok(
+      v.phase === 'ejected' && v.veto?.afterBlocks === 2 && v.veto.tx === T('v40') && v.veto.workflowId === WF && v.veto.toInner === 23 && a.block === 1502 && P('40').reason?.tx === T('v40') && a.evidenceHash === EVX,
+      `${label}: the first veto stays on screen (2 blocks after the proposal, its tx and workflow id), not the re-sent one (shown: ${v.veto?.afterBlocks} blocks, ${v.veto?.tx === T('v40') ? 'first tx' : 'other tx'}, ${v.veto?.workflowId === WF ? 'first workflow id' : 'other workflow id'})`,
+    )
+  }
+  const streamBefore = store.stream.length
+  for (const l of [proposed, ...first, ...again]) handleLog(l, false, NOHOOK)
+  check('a veto report re-sent 28 blocks later')
+  ok(store.stream.slice(streamBefore).filter((l) => l.type === 'Vetoed' && l.text.includes('#40')).length === 2, 'the event stream still lists both Vetoed logs: both are real chain events')
+  store.proposals.delete('40')
+  resetSeen()
+  for (const l of [proposed, ...again, ...first]) handleLog(l, false, NOHOOK)
+  check('the same logs out of order (the re-sent report read first)')
+  store.proposals.delete('40')
+  pickActive()
+}
+
 
 // ---------- 10. attack picker (lab.ts) and operator mode (operator-client.ts) ----------
 {
@@ -1140,6 +1192,65 @@ setLang('zh-CN', false)
     ok(reads <= 2 * 40 + 2, 'backfill reads at most labScanMax older ids')
     store.proposals.delete('30')
     resetSeen()
+  }
+
+  // 10i. ?p=<id> of a proposal older than the recent ones: it is read with its logs; an id the chain does not have
+  // says so (never "the airlock is empty")
+  {
+    PROPS.set(25, prop(IMPL.evilOwner, 2, 1360, 1n))
+    LOGS.push(
+      mkLog(ADMIN_ABI, ADMIN, 'Proposed', { id: 25n, kind: 0, target: IMPL.evilOwner, value: 0n, data: '0x', codehash: H32('c25'), readyBlock: 1385n }, 1360, T('p25'), 0),
+      mkLog(ADMIN_ABI, ADMIN, 'Vetoed', { id: 25n, guardian: RECV, ruleHash: ruleHashOf('R2_OWNER'), vetoCount: 1n }, 1361, T('v25'), 0),
+    )
+    const keep = { active: store.activeId, follow: store.follow }
+    ok(!store.proposals.has('25') && !playbackGate.loaded.has('25'), '?p=25 is not among the recent proposals')
+    const got = await loadPicked('25', 31, 1400)
+    ok(got && P('25')?.proposeTx === T('p25') && P('25').chain?.status === 2 && P('25').guards.cre.block === 1361 && P('25').guards.cre.rule === 'R2_OWNER' && playbackGate.loaded.has('25'), '?p=25 outside the recent window: that proposal and its logs are read (it can be shown and replayed)')
+    const before = rpcCalls.length
+    const none = await loadPicked('99', 31, 1400)
+    ok(!none && !store.proposals.has('99') && rpcCalls.length === before, '?p=99 past nextId: no such proposal, nothing read and nothing invented')
+    store.proposals.delete('25')
+    playbackGate.loaded.delete('25')
+    chainHealth.pickMissing = '99'
+    store.activeId = '99'
+    setManualPick(true)
+    setLang('en', false)
+    render()
+    const en = plain(region('h-head'))
+    setLang('zh-CN', false)
+    render()
+    const zh = plain(region('h-head'))
+    ok(en.includes('No proposal #99') && en.includes('The newest proposal on Ethereum Sepolia is #7') && !en.includes('The airlock is empty') && zh.includes('没有提案 #99') && !zh.includes('气闸空着'), `the hero says there is no such proposal (${en.trim().slice(0, 90)})`)
+    chainHealth.pickMissing = null
+    setManualPick(false)
+    store.activeId = keep.active
+    store.follow = keep.follow
+    pickActive()
+    resetSeen()
+  }
+
+  // 10j. the invite after the first-visit replay goes as soon as a live proposal is on screen (one sent from the CLI or
+  // another device takes the screen without the viewer touching the page)
+  {
+    const keepFollow = store.follow
+    store.follow = true
+    setManualPick(false)
+    lab.autoplay = 'done'
+    lab.invite = 'evil-drain'
+    render()
+    const up = region('lab').includes('class="invite"') && plain(region('lab')).includes('刚才是')
+    HEAD = 1405
+    PROPS.set(31, prop(IMPL.evilMint, 1, 1402))
+    handleLog(mkLog(ADMIN_ABI, ADMIN, 'Proposed', { id: 31n, kind: 0, target: IMPL.evilMint, value: 0n, data: '0x', codehash: H32('c31'), readyBlock: 1427n }, 1402, T('p31'), 0), true, { wantReceipt() {}, wantBlockTs() {}, refresh() {}, onLive: (ts) => replay.onLive(ts) })
+    blocks.ingest(1403)
+    tickLab()
+    render()
+    ok(up && store.activeId === '31' && lab.invite === null && !region('lab').includes('class="invite"') && !plain(region('lab')).includes('刚才是') && region('h-head').includes('tag live'), 'a live proposal takes the screen: the "That was a real replay…" heading goes at once, never next to a live attack')
+    store.proposals.delete('31')
+    PROPS.delete(31)
+    store.arrival = null
+    store.follow = keepFollow
+    pickActive()
   }
   lab.card = null
   lab.pid = null

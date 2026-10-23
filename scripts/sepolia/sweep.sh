@@ -85,9 +85,12 @@ say "== $HEAD" | tee -a "$LOG"
 T0=$(now_s)
 cd "$ROOT/cre"
 set +e
-env "$(attester_env)=$ATTESTER_PK" CRE_ETH_PRIVATE_KEY="$SENDER_PK" \
-  "$SIM" workflow simulate ./veto -T "$TARGET" --config "$CONFIG" ${WASM_ARGS[@]+"${WASM_ARGS[@]}"} \
-  --non-interactive --trigger-index 1 --broadcast >"$RUNLOG" 2>&1 &
+# the keys reach the simulator through its environment only (exported by the builtin, never in any argv)
+(
+  export "$(attester_env)=$ATTESTER_PK" CRE_ETH_PRIVATE_KEY="$SENDER_PK"
+  exec "$SIM" workflow simulate ./veto -T "$TARGET" --config "$CONFIG" ${WASM_ARGS[@]+"${WASM_ARGS[@]}"} \
+    --non-interactive --trigger-index 1 --broadcast
+) >"$RUNLOG" 2>&1 &
 SPID=$!
 unset ATTESTER_PK SENDER_PK
 wait "$SPID"

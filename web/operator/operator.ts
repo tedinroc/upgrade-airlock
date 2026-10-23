@@ -28,7 +28,7 @@ export const SEPOLIA_CHAIN_ID = 11155111
 export const DEFAULT_RPCS: readonly string[] = ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org']
 /** A new proposal waits until the newest one is at least this many blocks old */
 export const COOLDOWN_BLOCKS = 3
-/** proposeUpgrade measured 593,654 gas on Sepolia; an explicit limit means no estimate call */
+/** proposeUpgrade used 594,008 gas on Sepolia (each one so far); an explicit limit means no estimate call */
 export const GAS_LIMIT = 1_000_000n
 /** Never sign a fee above this (a node answering nonsense must not drain the owner): 500 gwei */
 export const MAX_FEE_CAP = 500_000_000_000n

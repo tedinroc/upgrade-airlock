@@ -25,6 +25,15 @@ export function isLoopback(url: string): boolean {
   return /^https?:\/\/(?:127\.\d+\.\d+\.\d+|localhost|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(url)
 }
 
+/** The ?rpc= override this page uses: a local fork (a loopback address) only. Any other host is ignored, so a link to
+ *  the public site can never make it read someone else's JSON-RPC and draw that under "Live · Ethereum Sepolia" with
+ *  Etherscan links. Offline mode has no endpoints at all. */
+export function rpcOverrideOf(raw: string | null | undefined, offline = false): string | null {
+  if (offline) return null
+  const s = parseRpcOverride(raw)
+  return s !== null && isLoopback(s) ? s : null
+}
+
 /** Chain settings with an optional ?rpc= override: only that endpoint is used (WS on the same host and port, as
  *  anvil serves both). A local fork has no explorer and no Sourcify (its addresses and hashes are not on Sepolia). */
 export function chainWithRpc(base: ChainConfig, rpc: string | null): ChainConfig {
@@ -42,10 +51,10 @@ export function chainWithRpc(base: ChainConfig, rpc: string | null): ChainConfig
   }
 }
 
-const RPC_OVERRIDE = OFFLINE ? null : parseRpcOverride(params.get('rpc'))
+const RPC_OVERRIDE = rpcOverrideOf(params.get('rpc'), OFFLINE)
 
 /** Live view of a local Sepolia fork (?rpc= on a loopback address): numbers are labelled "local fork" */
-export const FORK = RPC_OVERRIDE !== null && isLoopback(RPC_OVERRIDE)
+export const FORK = RPC_OVERRIDE !== null
 
 /** Offline mode has no endpoints and no outbound links at all, so nothing can open a connection by accident */
 export const CHAIN: ChainConfig = OFFLINE

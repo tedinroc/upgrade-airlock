@@ -9,6 +9,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
 [![Licence : MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Démo en ligne](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
+[![Vidéo de démo](https://img.shields.io/badge/demo%20video-watch-red)](https://upgrade-airlock.pages.dev/video/)
 [![Ethereum Sepolia](https://img.shields.io/badge/Ethereum-Sepolia-627EEA?logo=ethereum&logoColor=white)](https://sepolia.etherscan.io/address/0x28e7aAC40560804F480e454bF9C12F50C83b700B)
 [![Chainlink CRE](https://img.shields.io/badge/Chainlink-CRE-375BD2?logo=chainlink&logoColor=white)](#chainlink-cre)
 
@@ -19,22 +20,34 @@
 ## Vue d'ensemble
 
 Upgrade Airlock dote chaque mise à niveau de contrat de deux portes. La **porte extérieure** est un délai d'attente
-mesuré en blocs. La **porte intérieure** ne s'ouvre que lorsqu'un workflow Chainlink CRE a attaqué la nouvelle
-implémentation dans un simulateur, sur quatre fournisseurs RPC indépendants, que toutes les réponses concordent, que le
-DON a atteint un consensus sur le verdict et qu'un rapport **Clear** signé a été inscrit on-chain. Une implémentation
-malveillante reçoit à la place un **Veto** signé et ne peut jamais s'exécuter, même lorsque l'attaquant détient la clé
-de mise à niveau. Conçu pour ETH Shenzhen 2026 sur Ethereum Sepolia.
+mesuré en blocs. La **porte intérieure** ne s'ouvre qu'avec une autorisation inscrite on-chain. Automatiquement, cela
+signifie qu'un workflow Chainlink CRE a attaqué la nouvelle implémentation dans un simulateur en interrogeant quatre
+fournisseurs RPC indépendants, qu'au moins deux ont répondu et que toutes les réponses concordent, que l'étape de
+consensus du workflow (`consensusIdenticalAggregation`) s'est accordée sur le verdict et qu'un rapport **Clear** signé
+a été inscrit on-chain. Quand CRE ne peut pas répondre du tout, la clé de l'approbateur peut autoriser à la main, avec
+des preuves enregistrées ; le balayeur juge quand même cette proposition tant qu'elle fait partie des 20 ids les plus
+récents, et un veto de CRE ou d'un gardien l'emporte. Une implémentation malveillante que la recherche d'attaques
+atteint reçoit à la place un **Veto** signé et ne s'exécute pas, même lorsque l'attaquant détient la clé de mise à
+niveau ; le mode strict ajoute une revue humaine du code pour ce qu'une recherche bornée ne peut pas atteindre.
+Aujourd'hui, les verdicts viennent de la CLI CRE officielle (`cre workflow simulate --broadcast`), qui exécute le
+workflow sur un serveur ; le même workflow et le même code de contrats peuvent être déployés sur un DON. Conçu pour
+ETH Shenzhen 2026 sur Ethereum Sepolia.
 
 > [!TIP]
-> **Démo en ligne : [upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)**
+> **Démo en ligne : [upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)** · **Vidéo de démo :
+> [upgrade-airlock.pages.dev/video](https://upgrade-airlock.pages.dev/video/)** (chinois simplifié et anglais)
 >
 > La salle de crise lit Ethereum Sepolia directement depuis votre navigateur, en lecture seule. Chaque proposition y
 > est représentée comme un sas : la **porte extérieure** enregistre la proposition, la **chambre** décompte le délai
-> d'attente, et la **porte intérieure** reste verrouillée jusqu'à ce que le Clear de Chainlink CRE soit inscrit
-> on-chain. Un Veto éjecte la proposition, avec sa règle, son hash de preuve et sa transaction. La page s'ouvre en
-> chinois simplifié : [`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) passe en anglais et
-> [`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) en chinois traditionnel. Toutes les transactions
-> correspondantes sont répertoriées dans [les preuves de l'exécution en direct](docs/evidence/sepolia-live.md).
+> d'attente, et la **porte intérieure** reste verrouillée jusqu'à ce qu'une autorisation soit inscrite on-chain (le
+> Clear de Chainlink CRE, ou une autorisation manuelle de l'approbateur, que la salle de crise signale comme telle).
+> Un Veto éjecte la proposition, avec sa règle, son hash de preuve et sa transaction. Une première visite ouvre un
+> sélecteur d'attaques : chaque carte (six attaques et la mise à niveau honnête v2) rejoue la proposition réelle la
+> plus récente de son type sur Sepolia, signalée comme une relecture. La page s'ouvre en chinois simplifié :
+> [`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) passe en anglais et
+> [`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) en chinois traditionnel. Les transactions
+> correspondantes (propositions #1 à #10) sont répertoriées dans [les preuves de l'exécution en
+> direct](docs/evidence/sepolia-live.md).
 
 ## <a id="highlights"></a>Points forts
 
@@ -42,21 +55,24 @@ de mise à niveau. Conçu pour ETH Shenzhen 2026 sur Ethereum Sepolia.
   panne RPC, des fournisseurs en désaccord ou une exécution ratée laissent la proposition non autorisée ou la frappent
   d'un veto : cela peut retarder une mise à niveau, jamais en laisser passer une. Un veto l'emporte toujours sur une
   autorisation.
-- **Une attaque, pas une checklist.** Chaque nœud du DON exécute la mise à niveau contre l'état réel du proxy avec
-  `eth_simulateV1` sur quatre fournisseurs RPC. Un inconnu doté de fonds appelle chaque sélecteur du nouveau bytecode,
+- **Une attaque, pas une checklist.** Le workflow (sur chaque nœud, dans un déploiement sur un DON) exécute la mise à
+  niveau contre l'état réel du proxy avec `eth_simulateV1` sur quatre fournisseurs RPC. Un inconnu doté de fonds appelle chaque sélecteur du nouveau bytecode,
   des arguments de type détenteur visent chaque nouvelle fonction, et l'offre totale, la propriété et les soldes sont
   comparés avant et après. Au moins deux fournisseurs doivent répondre, et toutes les réponses doivent concorder.
-- **Des verdicts liés à la proposition.** Le DON atteint un consensus sur `{verdict, rule}`. Le rapport porte une
+- **Des verdicts liés à la proposition.** L'étape de consensus identique du workflow s'accorde sur `{verdict, rule}`. Le rapport porte une
   attestation EIP-712 liée au contenu exact de la proposition (`proposalDigest`), à la chaîne, au récepteur et à un
   bloc d'échéance, ainsi qu'un hash de preuve que chacun peut recalculer à partir des données de la chaîne.
-- **Rien n'échappe au jugement.** Un balayeur cron examine les 20 propositions les plus récentes toutes les 60
+- **Les logs manqués sont rattrapés.** Un balayeur cron examine les 20 propositions les plus récentes toutes les 60
   secondes et juge celles que le déclencheur de log a manquées, y compris les mises à niveau que l'approbateur a
-  autorisées manuellement ; son veto l'emporte.
+  autorisées manuellement ; son veto l'emporte. Une proposition repoussée sous les 20 ids les plus récents n'est plus
+  jugée : elle reste sans autorisation, sauf si l'approbateur l'a autorisée manuellement
+  ([la fenêtre de balayage](docs/design.md#the-sweep-window)).
 - **En direct sur Ethereum Sepolia.** La CLI CRE officielle a exécuté le workflow sur un serveur et répondu on-chain à
-  sept propositions : une mise à niveau honnête autorisée puis exécutée, six attaques bloquées par veto (R1, R2, R3,
-  R3B, R7, R9). Tous les contrats sont vérifiés sur Sourcify.
-- **Testé de bout en bout.** 117 tests Foundry, 118 tests unitaires du workflow et 199 vérifications d'autotest de la
-  salle de crise tournent dans la [CI](.github/workflows/ci.yml) ; un script de bout en bout sur fork pilote la boucle
+  chaque proposition (dix au 2026-10-23) : une mise à niveau honnête autorisée puis exécutée, neuf attaques bloquées
+  par veto (R1, R2, R3, R3B, R7, R9). Tous les contrats sont vérifiés sur Sourcify.
+- **Testé de bout en bout.** La [CI](.github/workflows/ci.yml) exécute 117 tests Foundry, 118 tests unitaires du
+  workflow et 387 des 394 vérifications d'autotest de la salle de crise (les 7 autres ont besoin de la sortie de
+  compilation de forge et de cast, que le job de CI n'a pas) ; un script de bout en bout sur fork pilote la boucle
   complète à travers le simulateur CRE.
 
 ## Le problème
@@ -78,7 +94,8 @@ arrivé à de nombreuses reprises :
 
 Un timelock se contente de faire attendre l'attaquant, et personne n'est tenu de surveiller pendant ce temps. De longs
 délais bloquent aussi les correctifs d'urgence. Upgrade Airlock fait travailler l'attente : une mise à niveau ne peut
-pas s'exécuter tant qu'une vérification indépendante et décentralisée ne l'a pas validée, et cette vérification
+pas s'exécuter tant qu'une vérification indépendante (décentralisée une fois déployée sur un DON CRE) ne l'a pas
+validée, et cette vérification
 s'exécute automatiquement sur chaque proposition.
 
 ## <a id="how-it-works"></a>Fonctionnement
@@ -97,11 +114,11 @@ sequenceDiagram
     Note over Admin: Porte extérieure : délai d'attente de 25 blocs, environ 5 minutes sur Sepolia
     Admin-->>CRE: log Proposed (EVM log trigger), ou le balayeur cron toutes les 60 s
     CRE->>Admin: lectures EVM au bloc de la proposition
-    loop Sur chaque nœud du DON, pour chaque fournisseur
+    loop Sur chaque nœud (un dans le simulateur, chaque nœud du DON une fois déployé), pour chaque fournisseur
         CRE->>RPC: eth_getCode, puis la simulation d'attaque eth_simulateV1
         RPC-->>CRE: verdict et règle
     end
-    Note over CRE: Quorum : au moins 2 réponses, toutes identiques, sinon Veto R6<br/>consensus du DON sur le verdict et la règle<br/>hash de preuve et attestation EIP-712
+    Note over CRE: Quorum : au moins 2 réponses, toutes identiques, sinon Veto R6<br/>consensus identique sur le verdict et la règle<br/>hash de preuve et attestation EIP-712
     CRE->>Fwd: writeReport
     Fwd->>Recv: onReport(metadata, report)
     alt Tous les contrôles réussis
@@ -132,9 +149,10 @@ sequenceDiagram
    lus avant et après, le solde du détenteur juste après chaque appel de type détenteur, et les événements émis par
    chaque sonde sont vérifiés (R1 à R4, R3B). Enfin, le nouveau bytecode est analysé à la recherche d'opcodes qui ne
    se comportent pas de la même façon sur un bloc réel et en simulation (R9).
-3. **S'accorder.** Chaque nœud du DON exécute la simulation sur quatre fournisseurs. Au moins deux doivent répondre et
-   toutes les réponses doivent donner le même verdict ; dans tout autre cas, c'est un veto (R6). Le DON s'accorde
-   ensuite sur un `{verdict, rule}` identique.
+3. **S'accorder.** Chaque nœud (chaque nœud du DON dans un déploiement sur un DON ; aujourd'hui, le simulateur de la
+   CLI) exécute la simulation sur quatre fournisseurs. Au moins deux doivent répondre et toutes les réponses doivent
+   donner le même verdict ; dans tout autre cas, c'est un veto (R6). L'étape de consensus s'accorde ensuite sur un
+   `{verdict, rule}` identique.
 4. **Transmettre.** Le workflow calcule le hash d'un JSON de preuve canonique, signe un verdict EIP-712 avec sa clé
    d'attesteur (un secret CRE) et écrit le rapport via le forwarder. `AirlockReceiver` vérifie l'expéditeur, la
    fraîcheur et la signature, ainsi que le lien du verdict avec cette proposition précise (`proposalDigest`), puis
@@ -153,7 +171,8 @@ jamais laissée passer. Lorsque CRE ne peut pas répondre du tout, la clé d'app
 mise à niveau en consignant des preuves ; le balayeur juge tout de même cette mise à niveau dès que CRE répond à
 nouveau, et un veto de CRE ou d'un gardien l'emporte toujours. `breakGlass()` permet au propriétaire ou à n'importe quel
 gardien de basculer immédiatement le proxy vers une implémentation en pause préenregistrée. Sortir de l'état de pause
-est une mise à niveau ordinaire qui franchit les deux portes.
+est une mise à niveau qui franchit les deux portes ; une proposition autorisée n'expire jamais, si bien qu'une mise à
+niveau autorisée plus tôt peut aussi mettre fin à la pause ([limites connues](docs/design.md#known-limitations)).
 
 Plus de détails : [docs/design.md](docs/design.md) (modèle de menace, machine à états de l'autorisation, liaison des
 rapports, budgets) et [cre/README.md](cre/README.md) (le workflow).
@@ -214,7 +233,7 @@ TypeScript de CRE (`@chainlink/cre-sdk` 1.23.0) et compilé en WASM avec la CLI 
 | Lecture EVM (`callContract`) | [`cre/veto/workflow.ts#L114-L122`](cre/veto/workflow.ts#L114-L122), [`#L137-L142`](cre/veto/workflow.ts#L137-L142), [`cre/veto/chain.ts`](cre/veto/chain.ts) | Proposition, autorisation, `oracleJudged`, approbations et soldes, regroupés via Multicall3 au bloc de la proposition ou à `LATEST` |
 | Lecture EVM (`headerByNumber`) | [`cre/veto/workflow.ts#L125-L136`](cre/veto/workflow.ts#L125-L136) | Le dernier bloc, et le hash du bloc de la proposition qui sert de graine à l'inconnu simulé |
 | Capacité HTTP en mode nœud (node mode) | [`cre/veto/workflow.ts#L167-L189`](cre/veto/workflow.ts#L167-L189), [`#L80-L94`](cre/veto/workflow.ts#L80-L94), [`cre/veto/judge.ts#L157-L220`](cre/veto/judge.ts#L157-L220) | Chaque nœud envoie à chaque fournisseur `eth_getCode`, puis une ou deux requêtes `eth_simulateV1` (chacune sous la limite de 120 kb par requête) |
-| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188), quorum dans [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | Le DON s'accorde sur `{verdict, rule}` (52 octets au plus) |
+| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188), quorum dans [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | Consensus identique sur `{verdict, rule}` (52 octets au plus ; chaque nœud du DON une fois déployé) |
 | Secrets | [`cre/veto/workflow.ts#L160-L166`](cre/veto/workflow.ts#L160-L166), [`cre/secrets.yaml`](cre/secrets.yaml) | La clé d'attesteur EIP-712, récupérée une fois par exécution |
 | Report + `writeReport` | [`cre/veto/workflow.ts#L143-L149`](cre/veto/workflow.ts#L143-L149), [`cre/veto/airlock.ts#L229-L282`](cre/veto/airlock.ts#L229-L282), [`cre/veto/report.ts`](cre/veto/report.ts) | `runtime.report` (ECDSA, keccak256) et `evm.writeReport`, puis une lecture de la proposition pour confirmer le résultat |
 | Forwarder + `IReceiver` | [`src/cre/AirlockReceiver.sol#L88-L120`](src/cre/AirlockReceiver.sol#L88-L120), [`#L156-L169`](src/cre/AirlockReceiver.sol#L156-L169), [`src/cre/IReceiver.sol`](src/cre/IReceiver.sol), [`script/DeployEth.s.sol#L142`](script/DeployEth.s.sol#L142) | `onReport` n'accepte que le forwarder configuré et vérifie l'id et le propriétaire du workflow lorsqu'ils sont configurés |
@@ -240,8 +259,8 @@ une valeur de consensus de 52 octets au plus. Les budgets sont détaillés dans
 
 ## <a id="live-on-sepolia"></a>En direct sur Sepolia
 
-Ethereum Sepolia, chain id 11155111. Déployé avec [`script/DeployEth.s.sol`](script/DeployEth.s.sol) au bloc
-11950682 (13 transactions) ; tous les contrats sont vérifiés sur Sourcify. Propriétaire, approbateur, gardien d'urgence
+Ethereum Sepolia, chain id 11155111. Déployé avec [`script/DeployEth.s.sol`](script/DeployEth.s.sol) dans les
+blocs 11950684–11950699 (13 transactions ; AirlockAdmin au bloc 11950697) ; tous les contrats sont vérifiés sur Sourcify. Propriétaire, approbateur, gardien d'urgence
 et attesteur sont quatre clés différentes. Le délai d'attente est de 25 blocs.
 
 | Contrat | Adresse |
@@ -260,7 +279,8 @@ et attesteur sont quatre clés différentes. Le délai d'attente est de 25 blocs
 | PausedImpl (cible de bris de glace) | [`0xb6573006fB607E96966d0F578B96AAB25413F5BE`](https://sepolia.etherscan.io/address/0xb6573006fB607E96966d0F578B96AAB25413F5BE) |
 | Chainlink MockKeystoneForwarder | [`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://sepolia.etherscan.io/address/0x15fC6ae953E024d975e77382eEeC56A9101f9F88) |
 
-Sept propositions, sept verdicts on-chain. Le bloc indiqué dans chaque lien est celui dans lequel la transaction a été
+Le premier passage : sept propositions, sept verdicts on-chain (les passages suivants, #8 à #10, sont listés dans
+[docs/evidence/sepolia-live.md](docs/evidence/sepolia-live.md)). Le bloc indiqué dans chaque lien est celui dans lequel la transaction a été
 incluse ; `(+n)` indique combien de blocs après la proposition le verdict CRE est arrivé.
 
 | Carte | Proposition | Verdict CRE | Tx de proposition | Tx de rapport | Ensuite |
@@ -302,7 +322,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 tests : règles, sondes, bytecode, rapports, budgets, handlers
 
 # la salle de crise
-(cd web && npm ci && npm run selftest)            # 199 vérifications : vue en direct et relecture hors ligne
+(cd web && npm ci && npm run selftest)            # 394 vérifications : vue en direct et sélecteur d'attaques, relecture hors ligne, API opérateur
 ```
 
 ### De bout en bout sur un fork de Sepolia
@@ -333,7 +353,8 @@ simulateur CRE avec `--broadcast` et vérifie chaque résultat on-chain :
 ### Kit opérateur Sepolia
 
 [`scripts/sepolia/`](scripts/sepolia/README.md) fait tourner la démo en direct. Les clés sont conservées hors du dépôt,
-une clé hexadécimale par fichier dans `KEY_DIR` (`owner`, `attester`, `sender`, `approver`, `emergency`) ; les scripts
+une clé hexadécimale par fichier dans `KEY_DIR` (`owner.key`, `attester.key`, `sender.key`,
+`approver.key`, `emergency.key`, plus un `sweeper.key` facultatif) ; les scripts
 ne les affichent jamais, et `deploy.sh` refuse de s'exécuter si propriétaire, approbateur, gardien d'urgence et
 attesteur ne sont pas quatre clés différentes. Chaque script peut aussi cibler un fork local avec `FORK=<port>`, ce qui
 permet de répéter la démo sans rien dépenser.
@@ -361,8 +382,17 @@ npm run dev                     # http://127.0.0.1:5173/
 npm run build:airlock           # synchronise deployments/sepolia.json dans la page, construit web/dist-airlock
 ```
 
-La salle de crise lit Sepolia directement et ne signe ni n'envoie jamais rien. Elle présente chaque proposition comme
-un sas : le délai d'attente, l'autorisation CRE, le veto avec sa règle et sa preuve.
+La page lit Sepolia directement ; elle ne détient aucune clé et ne signe ni n'envoie jamais rien. Elle présente chaque
+proposition comme un sas : le délai d'attente, l'autorisation CRE, le veto avec sa règle et sa preuve. Les visiteurs
+choisissent l'une des sept cartes (six attaques et la mise à niveau honnête v2) et regardent une relecture, signalée
+comme telle, de la proposition réelle la plus récente de ce type sur Sepolia (ou la proposition en direct tant qu'elle
+est dans son délai d'attente) : voir [le sélecteur d'attaques](web/README.md#attack-picker-what-a-visitor-sees). Pour
+la personne qui présente, il existe un mode opérateur (`web/operator/`, `web/functions/`) : en loopback uniquement sur
+le serveur de développement, protégé par jeton sur Cloudflare Pages, où il reste désactivé tant que les deux secrets
+`OWNER_KEY` et `OPERATOR_TOKEN` n'existent pas. Il envoie l'une des mêmes sept propositions fixes via `POST
+/api/operator/propose`, signée côté serveur avec la clé du propriétaire (la conception suppose déjà que cette clé
+fuite : elle ne peut que proposer), et la page d'un visiteur ne l'appelle jamais : voir [le mode
+opérateur](web/README.md#operator-mode-real-attacks-on-sepolia).
 
 | Paramètre d'URL | Effet |
 |---|---|
@@ -370,8 +400,10 @@ un sas : le délai d'attente, l'autorisation CRE, le veto avec sa règle et sa p
 | `?mode=offline` | Rejoue une exécution enregistrée sans aucune connexion réseau |
 | `?lang=en`, `?lang=zh-TW`, `?lang=zh-CN` | Langue de l'interface (par défaut `zh-CN` ; `L` passe de l'une à l'autre) |
 | `?rpc=http://127.0.0.1:<port>` | Lit plutôt un fork local de Sepolia, pour les répétitions |
+| `?op=1` | Mode opérateur : demande le jeton d'opérateur (réservé à la personne qui présente) |
 
-Appuyez sur `P` en mode direct pour rejouer les propositions les plus récentes à partir de leurs événements on-chain.
+Appuyez sur `P` en mode direct pour rejouer les propositions les plus récentes à partir de leurs événements on-chain,
+et sur `1` à `7` pour rejouer une carte du sélecteur.
 
 ## Structure du dépôt
 
@@ -393,6 +425,7 @@ cre/scripts/fork-e2e.sh         de bout en bout sur un fork anvil de Sepolia
 cre/setup.sh                    CLI CRE et bun épinglés
 scripts/sepolia/                kit opérateur de la démo en direct, avec des unités systemd pour un serveur
 web/                            salle de crise (Vite, TypeScript, viem)
+web/operator/, web/functions/   mode opérateur : sept propositions fixes signées côté serveur (serveur de dev, Pages Functions)
 deployments/sepolia.json        le déploiement en direct
 docs/design.md                  modèle de menace, machine à états de l'autorisation, liaison des rapports, budgets
 docs/evidence/                  l'exécution en direct enregistrée
@@ -420,7 +453,8 @@ approbateur, gardien d'urgence et attesteur sont quatre adresses différentes.
 **Une clé de propriétaire compromise peut proposer.** Chaque proposition attend la fin du délai au vu de tous pendant
 que CRE la juge, et requiert une autorisation que le propriétaire ne peut pas s'accorder lui-même. Le propriétaire peut
 aussi tirer le frein d'urgence (`breakGlass`), qui ne fait que basculer le proxy vers l'implémentation en pause
-préenregistrée ; en sortir est une mise à niveau qui franchit les deux portes.
+préenregistrée ; en sortir est une mise à niveau qui franchit les deux portes, et une mise à niveau autorisée plus tôt
+mais jamais exécutée peut aussi y mettre fin.
 
 **Cette même clé ne peut pas :**
 
@@ -437,6 +471,11 @@ préenregistrée ; en sortir est une mise à niveau qui franchit les deux portes
 L'autorisation manuelle de l'approbateur est un recours pour les cas où CRE ne peut pas répondre : le balayeur juge
 tout de même cette proposition tant qu'elle figure parmi les 20 ids les plus récents, et un veto de CRE ou d'un
 gardien l'emporte. Le modèle de menace complet se trouve dans [docs/design.md](docs/design.md#threat-model).
+
+Ce sont des contrats de démonstration pour testnet, avec des limites connues, chacune fixée par un test qui passe : les
+autorisations n'expirent jamais, la clé du propriétaire ne peut pas être changée (une clé volée peut remettre le jeton
+en pause après chaque reprise) et un seul gardien malveillant peut le maintenir en pause. Elles sont listées dans
+[docs/design.md](docs/design.md#known-limitations).
 
 ## Technologies utilisées
 

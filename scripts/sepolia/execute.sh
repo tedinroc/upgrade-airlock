@@ -15,7 +15,7 @@ check_rpc
 GA=$(dep airlockAdmin)
 PROXY=$(dep proxy)
 OWNER=$(addr_of owner)
-read -r KIND ST TARGET READY _ _ < <(proposal "$ID")
+read -r KIND ST TARGET READY _ PBLOCK < <(proposal "$ID") || die "could not read proposal #$ID from $RPC (try again, or set SEPOLIA_RPC)"
 
 # show_revert: what execute(id) does right now, as an eth_call from the owner (nothing is sent).
 show_revert() {
@@ -39,7 +39,7 @@ case "$ST" in
   0) die "proposal #$ID does not exist" ;;
   3) say "#$ID was already executed"; exit 0 ;;
   2)
-    EV=$(events_since "$(dep startBlock)")
+    EV=$(events_since "$PBLOCK") # the verdict lands after the proposal: a recent window every RPC serves
     RH=$(first_event vetoed "$ID" "$EV" | awk '{print $3}')
     say "#$ID (${KIND_NAMES[$KIND]} $(impl_name "$TARGET")) is Vetoed${RH:+ with $(rule_name "$RH")}; nothing sent:"
     show_revert

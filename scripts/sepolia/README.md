@@ -71,6 +71,12 @@ The cards for `propose.sh`:
   characters the CLI accepts for `--wasm`. `WASM_CACHE=0` turns the cache off.
 - Modes: with no `FORK`, the scripts talk to live Sepolia through `SEPOLIA_RPC` (default publicnode). With
   `FORK=<port>` they talk only to the anvil on `127.0.0.1:<port>`, and they refuse to run if that node is not anvil.
+  Reads are retried on a transient RPC error (`RPC_TRIES`, default 3, 2 s apart); a transaction is never resent.
+- Event history: public RPCs refuse one `eth_getLogs` from the deployment block (publicnode answers some requests
+  with `4444 pruned history unavailable`, drpc's free plan caps the range), so `status.sh` and `execute.sh` read the
+  verdict events in windows of 5,000 blocks (`EVENTS_CHUNK`), each from `SEPOLIA_RPC` and then the Tenderly public
+  gateway, which keeps the full history (`HISTORY_RPC=<url>[,<url>]` replaces that list; `EVENTS_FROM=<block>` starts
+  later). A window no RPC serves is skipped with a warning, and its rows show `-` for the rule, evidence and verdict tx.
 - State dir: live mode keeps logs, PID files and the compiled workflow in `$TMPDIR/upgrade-airlock-sepolia/`
   (`AIRLOCK_STATE` overrides it; the systemd units set it to `~/.local/state/upgrade-airlock`). Fork mode always
   uses `$TMPDIR/upgrade-airlock-fork-<port>/` and changes nothing under the repo.
@@ -83,9 +89,13 @@ The cards for `propose.sh`:
 |---|---|---|---|
 | 1 | `FORCE=1 YES=1 scripts/sepolia/deploy.sh` | The five role addresses, `n/13 confirmed` per block, the post-deploy checks, the address list with Etherscan links and the gas used | about 3 min (13 transactions, one per block; 96M gas) |
 | 2 | `bun scripts/sepolia/make-config.mjs` | `wrote cre/veto/config.sepolia.json (checked against cre/veto/config.ts)`, providers, quorum, sweeper schedule | <1 s |
-| 3 | `scripts/sepolia/fund-sender.sh 0.05` (and `0.01 approver` for the manual fallback) | Transfer link, both balances, how many reports that covers | one block, ~12 s |
-| 4 | `bun scripts/sepolia/probe-rpcs.ts` | One row per provider and card plus a quorum row per card, the HTTP calls per upgrade, then `PROBE: ALL OK` (evilMint R1, evilOwner R2, evilFee R3, evilBaseFee R9, evilDrain R3B, v2 pass) | about a minute (6 cards on 4 providers; not timed on live yet) |
+| 3 | `scripts/sepolia/fund-sender.sh 0.05` (and `0.01 approver`, `0.01 emergency` for the manual fallbacks) | Transfer link, both balances, how many reports that covers | one block, ~12 s |
+| 4 | `bun scripts/sepolia/probe-rpcs.ts` | One row per provider and card plus a quorum row per card, the HTTP calls per upgrade, then `PROBE: ALL OK` (evilMint R1, evilOwner R2, evilFee R3, evilBaseFee R9, evilDrain R3B, v2 pass), or `PROBE: QUORUM OK, every verdict as expected; failing providers: ...` when only a rate-limited provider (often 1rpc) failed. Both are a go; only `PROBE: FAIL` (a wrong verdict, or fewer than 2 answers) needs a provider change | about a minute (6 cards on 4 providers) |
 | 5 | A full rehearsal on a fork (below), then `fork.sh save` for the offline fallback | | ~15 min |
+
+`clear.sh` is paid by the approver key and a human veto by the emergency key. On the live deployment neither key
+held Sepolia ETH on 2026-10-23, so a live hand clearance or human veto needs step 3 for that key first; `breakGlass`
+by the funded owner key works as it is.
 
 `deploy.sh` with `FORCE=1` replaces `deployments/sepolia.json` (git keeps the old file). Alternatively deploy with
 `OUT_JSON=deployments/<name>.json` and run the other scripts with `DEPLOY_JSON=<that file>`, passing the same file
@@ -119,7 +129,7 @@ every minute.
 
 | # | Terminal B | Prints | Time on 12 s blocks |
 |---|---|---|---|
-| 0 | `scripts/sepolia/status.sh` | Proposals so far, the proxy's implementation, `receiver is guardian: true` | ~10 to 20 s on a public RPC |
+| 0 | `scripts/sepolia/status.sh` | Proposals so far, the proxy's implementation, `receiver is guardian: true`, then one row per proposal | 20 s to 2 min on public RPCs (a few reads per row, then the event scan); the header line alone shows the chain is reachable |
 | 1 | `scripts/sepolia/propose.sh v2` | `proposed #id ... executable from block B (+25 blocks, ~5m00s at 12 s blocks) once cleared`, then `CLEARED #id by CRE receiver` with the evidence hash and the report tx | mined in ≤12 s; cleared 1 block later: 24 s from the command to `CLEARED` |
 | 2 | `scripts/sepolia/propose.sh evil-mint` | `VETOED #id by CRE receiver: R1_TOTAL_SUPPLY, in block B (+n blocks, ...)`, evidence, report tx | 22 to 36 s each: mined in ≤12 s, vetoed 1 block later (2 blocks when a provider times out) |
 | 3 | `scripts/sepolia/propose.sh evil-owner` | ... `R2_OWNER` | same |
@@ -194,11 +204,23 @@ and simulator):
 
 ## When something fails
 
-- **A provider is down or rate-limited.** Run `probe-rpcs.ts`, then regenerate the config with the providers that
-  answer, for example `bun scripts/sepolia/make-config.mjs --providers publicnode,drpc,thirdweb,0xrpc`, and restart
+- **A provider is down or rate-limited.** Run `probe-rpcs.ts`. `PROBE: QUORUM OK` with one rate-limited provider
+  listed is a go: errors are left out of the quorum. Only when it ends `PROBE: FAIL`, regenerate the config with the
+  providers that answer, for example `bun scripts/sepolia/make-config.mjs --providers publicnode,drpc,thirdweb,0xrpc`, and restart
   the listener (`airlock.sh`, or `systemctl --user restart airlock-listener`). At least `minAgree` (2) providers
   must answer and every answer must agree; otherwise the workflow fails closed with `R6_SIM_FAILURE`, which would
   also veto the honest v2. An error only costs time, because errors are left out of the quorum.
+- **publicnode answers 403 or resets connections.** The listener polls for logs and sends its reports through the
+  single `sepolia` RPC in `cre/project.yaml`, and the scripts use `SEPOLIA_RPC`; both default to publicnode. On
+  2026-10-20/21 the server saw publicnode answer with Cloudflare `403 Forbidden` challenge pages in bursts of about a
+  minute; the simulator ended listen mode, `airlock.sh` restarted it and the sweeper judged what arrived meanwhile.
+  Check with `journalctl --user -u airlock-listener --since -3h -g '403 Forbidden|connection reset'`. Switch only if
+  the bursts keep coming, and test the other RPC first: a dry `cre workflow simulate ./veto -T sepolia` (no
+  `--broadcast`, no `--listen`) against a copy of `project.yaml` that points at it. Then change `SEPOLIA_RPC` in
+  `~/.config/upgrade-airlock/airlock.env` and the server's own `cre/project.yaml`, and restart the listener once.
+- **`status.sh` or `execute.sh` warns that no RPC served the events.** The chain reads still worked (the header and
+  the states are right); only the rule, evidence and verdict tx of older rows are missing. Point `HISTORY_RPC` at an
+  RPC that keeps the full history, or set `EVENTS_FROM` to a recent block.
 - **The listener is down.** Nothing passes unjudged: the proposal stays Pending without a clearance, and the
   sweeper judges it on its next run (the timer, or `sweep.sh` by hand; `SWEEP_MIN_AGE=0` takes it at once). The
   sweeper looks at the newest 20 proposal ids (`sweepWindow`) and does at most one attack simulation per run (the
@@ -255,6 +277,9 @@ journalctl --user -u airlock-sweep -n 50          # the last sweeps (also in $AI
 - A fork deployment builds into the state dir and keeps forge's run cache there (`--out`, `--cache-path`), and
   `FOUNDRY_BROADCAST` keeps its broadcast logs out of `broadcast/`, so the live run's
   `cache/DeployEth.s.sol/11155111/` (which `forge script --resume` needs) is never touched.
-- `airlock.sh` and `sweep.sh` hand the attester and sender keys to the simulator through environment variables only;
-  their logs never contain them. After the rehearsal every log and every kit file was searched for the five demo
-  keys: no match.
+- `airlock.sh` and `sweep.sh` hand the attester and sender keys to the simulator, and `deploy.sh` the owner key to
+  forge, through environment variables only (exported by the shell builtin, so they are in no process's arguments);
+  their logs never contain them. `cast` is different: deriving an address (`cast wallet address`) and `send_as`
+  (`cast send`) pass the key as a command-line argument, so it shows in the process list while that call runs. Run
+  the kit as the only user on the host. After the rehearsal every log and every kit file was searched for the five
+  demo keys: no match.

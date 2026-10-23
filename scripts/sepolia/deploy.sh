@@ -94,7 +94,8 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 T0=$(now_s)
 (
-  cd "$ROOT" && exec env DEPLOYER_PK="$OWNER_PK" ATTESTER_ADDR="$ATTESTER" APPROVER_ADDR="$APPROVER" \
+  # the key goes to forge's environment through the builtin export; env's own arguments hold addresses only
+  cd "$ROOT" && export DEPLOYER_PK="$OWNER_PK" && exec env ATTESTER_ADDR="$ATTESTER" APPROVER_ADDR="$APPROVER" \
     EMERGENCY_GUARDIAN_ADDR="$EMERGENCY" ALLOW_MOCK_FORWARDER=1 OUT_JSON="$OUT_REL" FOUNDRY_PROFILE=eth \
     forge script script/DeployEth.s.sol --rpc-url "$RPC" --broadcast --slow --skip-simulation ${FORGE_DIRS[@]+"${FORGE_DIRS[@]}"}
 ) >"$LOG" 2>&1 &

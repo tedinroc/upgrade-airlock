@@ -91,6 +91,8 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
   if (live) hooks.onLive(ts)
   const block = parseInt(l.blockNumber, 16)
   const tx = l.transactionHash
+  // chain order of this log: the first veto, verdict and reason win over later copies (see the Vetoed case)
+  const order = block * 1e6 + parseInt(l.logIndex, 16)
   const id = String(ev.args.proposalId ?? ev.args.id)
   const p = store.ensure(id)
   const after = p.proposeBlock ? msg('ev.after', { n: block - p.proposeBlock }) : ''
@@ -125,11 +127,18 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
       if (g) {
         const a = p.guards[g]
         a.verdict = 'veto'
-        a.rule = rule ?? a.rule ?? null
-        a.ruleHash = String(ev.args.ruleHash)
-        a.tx = tx
-        a.block = block
-        hooks.wantReceipt(tx)
+        // the first veto stays on screen. Anyone can re-send a mined veto report until it expires (on Sepolia the
+        // forwarder is Chainlink's permissionless test forwarder), and AirlockAdmin then emits Vetoed again; such a
+        // replay leaves the proposal's state as it was, so its block and tx must not replace the first veto's ("vetoed
+        // N blocks after the proposal"). The event stream still lists it: it is a real chain event.
+        if (a.vetoOrder === undefined || order < a.vetoOrder) {
+          a.rule = rule ?? a.rule ?? null
+          a.ruleHash = String(ev.args.ruleHash)
+          a.tx = tx
+          a.block = block
+          a.vetoOrder = order
+          hooks.wantReceipt(tx)
+        }
       }
       const who = whoMsg(g ?? 'other', guardian)
       store.logT('chain', 'Vetoed', msg('ev.vetoed', { id, who, b: block, after, rule: rule ?? short(String(ev.args.ruleHash), 4), n: String(ev.args.vetoCount) }), 'bad', ts)
@@ -160,16 +169,23 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
       store.logT('chain', 'Executed', msg('ev.executed', { id, b: block, tx: short(tx) }), 'good', ts)
       break
     case 'ReasonAttached': {
-      p.reason = { tx, hash: String(ev.args.reportHash), block }
-      if (guardOf(String(ev.args.guardian)) === 'cre') p.guards.cre.evidenceHash = String(ev.args.reportHash)
+      // the first one stays (a re-sent veto report attaches its reason again)
+      if (!p.reason || (p.reason.order ?? Infinity) > order) {
+        p.reason = { tx, hash: String(ev.args.reportHash), block, order }
+        if (guardOf(String(ev.args.guardian)) === 'cre') p.guards.cre.evidenceHash = String(ev.args.reportHash)
+      }
       store.logT('chain', 'ReasonAttached', msg('ev.reason', { id, h: short(String(ev.args.reportHash)) }), 'info', ts)
       break
     }
     case 'Verdict': {
       const action = Number(ev.args.action)
       const a = p.guards.cre
-      a.evidenceHash = String(ev.args.evidenceHash)
-      a.workflowId = String(ev.args.workflowId)
+      // the first Verdict's workflowId and evidence hash stay: a re-sent report carries metadata the sender chose
+      if (a.verdictOrder === undefined || order < a.verdictOrder) {
+        a.evidenceHash = String(ev.args.evidenceHash)
+        a.workflowId = String(ev.args.workflowId)
+        a.verdictOrder = order
+      }
       const rule = ruleName(String(ev.args.ruleHash))
       if (action === ACTION_VETO) {
         a.verdict = 'veto'
@@ -179,7 +195,8 @@ export function handleLog(l: RawLog, live: boolean, hooks: LogHooks, ts = Date.n
       a.tx = a.tx ?? tx
       a.block = a.block ?? block
       const what = action === ACTION_CLEAR ? msg('ev.vClear') : msg('ev.vVeto', { rule: rule ?? short(String(ev.args.ruleHash), 4) })
-      store.logT('chain', 'Verdict', msg('ev.verdict', { id, what, h: short(a.evidenceHash), w: short(a.workflowId, 4) }), action === ACTION_CLEAR ? 'good' : 'bad', ts)
+      // the stream line is this log as it is on chain (a re-sent report shows its own metadata here, never on the cards)
+      store.logT('chain', 'Verdict', msg('ev.verdict', { id, what, h: short(String(ev.args.evidenceHash)), w: short(String(ev.args.workflowId), 4) }), action === ACTION_CLEAR ? 'good' : 'bad', ts)
       break
     }
   }

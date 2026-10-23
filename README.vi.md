@@ -9,6 +9,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live demo](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
+[![Demo video](https://img.shields.io/badge/demo%20video-watch-red)](https://upgrade-airlock.pages.dev/video/)
 [![Ethereum Sepolia](https://img.shields.io/badge/Ethereum-Sepolia-627EEA?logo=ethereum&logoColor=white)](https://sepolia.etherscan.io/address/0x28e7aAC40560804F480e454bF9C12F50C83b700B)
 [![Chainlink CRE](https://img.shields.io/badge/Chainlink-CRE-375BD2?logo=chainlink&logoColor=white)](#chainlink-cre)
 
@@ -19,22 +20,31 @@
 ## Tổng quan
 
 Upgrade Airlock đặt hai cánh cửa trước mọi lần nâng cấp hợp đồng. **Cửa ngoài** là một khoảng thời gian chờ tính bằng
-block. **Cửa trong** chỉ mở khi một workflow Chainlink CRE đã tấn công implementation mới trong trình mô phỏng trên
-bốn nhà cung cấp RPC độc lập, mọi câu trả lời đều khớp nhau, DON đã đạt đồng thuận về phán quyết, và một báo cáo
-**Clear** (thông qua) có chữ ký đã được ghi lên chuỗi. Ngược lại, một implementation độc hại sẽ nhận **Veto** (phủ
-quyết) có chữ ký và không bao giờ chạy được, kể cả khi kẻ tấn công đang nắm khóa nâng cấp. Dự án được xây dựng cho
-ETH Shenzhen 2026 trên Ethereum Sepolia.
+block. **Cửa trong** chỉ mở khi trên chuỗi đã ghi nhận một giấy thông hành. Theo cách tự động, điều đó có nghĩa là một
+workflow Chainlink CRE đã tấn công implementation mới trong trình mô phỏng và truy vấn bốn nhà cung cấp RPC độc lập,
+ít nhất hai nhà cung cấp đã trả lời và mọi câu trả lời đều khớp nhau, bước đồng thuận của workflow
+(`consensusIdenticalAggregation`) đã thống nhất về phán quyết, và một báo cáo **Clear** (thông qua) có chữ ký đã được
+ghi lên chuỗi. Khi CRE hoàn toàn không thể trả lời, khóa của approver có thể thông qua thủ công kèm bằng chứng được
+ghi lại; trình quét vẫn thẩm định đề xuất đó chừng nào nó còn nằm trong 20 id mới nhất, và phủ quyết của CRE hoặc
+guardian được ưu tiên. Ngược lại, một implementation độc hại mà cuộc tìm kiếm tấn công chạm tới sẽ nhận **Veto** (phủ
+quyết) có chữ ký và không được chạy, kể cả khi kẻ tấn công đang nắm khóa nâng cấp; với những gì một cuộc tìm kiếm có
+giới hạn không chạm tới, chế độ nghiêm ngặt bổ sung một bước review mã thủ công. Hiện nay các phán quyết đến từ CRE
+CLI chính thức (`cre workflow simulate --broadcast`) chạy workflow trên một máy chủ; cùng workflow và cùng mã hợp đồng
+đó có thể được triển khai lên một DON. Dự án được xây dựng cho ETH Shenzhen 2026 trên Ethereum Sepolia.
 
 > [!TIP]
-> **Demo trực tiếp: [upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)**
+> **Demo trực tiếp: [upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)** · **Video demo:
+> [upgrade-airlock.pages.dev/video](https://upgrade-airlock.pages.dev/video/)** (tiếng Trung giản thể và tiếng Anh)
 >
 > Phòng tác chiến (war room) đọc Ethereum Sepolia ngay từ trình duyệt của bạn, ở chế độ chỉ đọc. Mỗi đề xuất được vẽ
 > thành một khoang khóa khí: **cửa ngoài** ghi nhận đề xuất, **khoang chờ** đếm ngược thời gian chờ, và **cửa trong**
-> vẫn khóa cho đến khi lệnh Clear của Chainlink CRE được ghi lên chuỗi. Một Veto sẽ đẩy đề xuất ra ngoài, kèm theo quy
-> tắc, hash bằng chứng và giao dịch tương ứng. Trang mặc định hiển thị tiếng Trung giản thể:
-> [`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) chuyển sang tiếng Anh và
-> [`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) chuyển sang tiếng Trung phồn thể. Mọi giao dịch phía
-> sau đều được liệt kê trong [bằng chứng của lần chạy thực tế](docs/evidence/sepolia-live.md).
+> vẫn khóa cho đến khi một giấy thông hành được ghi lên chuỗi (lệnh Clear của Chainlink CRE, hoặc giấy thông hành thủ
+> công của approver, được war room ghi rõ là thủ công). Một Veto sẽ đẩy đề xuất ra ngoài, kèm theo quy tắc, hash bằng
+> chứng và giao dịch tương ứng. Lần đầu truy cập, trang mở bộ chọn tấn công: mỗi thẻ (sáu kiểu tấn công và bản nâng
+> cấp trung thực v2) phát lại đề xuất thật mới nhất cùng loại trên Sepolia, có ghi rõ là bản phát lại. Trang mặc định
+> hiển thị tiếng Trung giản thể: [`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) chuyển sang tiếng Anh và
+> [`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) chuyển sang tiếng Trung phồn thể. Các giao dịch phía
+> sau (đề xuất #1–#10) được liệt kê trong [bằng chứng của lần chạy thực tế](docs/evidence/sepolia-live.md).
 
 ## <a id="highlights"></a>Điểm nổi bật
 
@@ -42,23 +52,24 @@ ETH Shenzhen 2026 trên Ethereum Sepolia.
   bỏ lỡ, RPC gặp sự cố, các nhà cung cấp trả lời không khớp hay một lần chạy thất bại đều chỉ khiến đề xuất chưa được
   thông qua hoặc bị phủ quyết: chúng có thể làm chậm một bản nâng cấp, nhưng không bao giờ để nó lọt qua. Phủ quyết
   luôn được ưu tiên hơn giấy thông hành.
-- **Một cuộc tấn công, không phải một danh sách kiểm tra.** Mỗi node DON chạy bản nâng cấp trên trạng thái thật của
-  proxy bằng `eth_simulateV1` trên bốn nhà cung cấp RPC. Một người lạ được cấp sẵn tiền sẽ gọi mọi selector trong
+- **Một cuộc tấn công, không phải một danh sách kiểm tra.** Workflow (trên mỗi node, khi triển khai với DON) chạy bản
+  nâng cấp trên trạng thái thật của proxy bằng `eth_simulateV1` trên bốn nhà cung cấp RPC. Một người lạ được cấp sẵn tiền sẽ gọi mọi selector trong
   bytecode mới, mọi hàm mới đều bị gọi thử với đối số theo dạng holder (người nắm giữ token), và tổng cung, quyền sở
   hữu cùng các số dư được so sánh trước và sau. Ít nhất hai nhà cung cấp phải trả lời, và mọi câu trả lời phải khớp
   nhau.
-- **Phán quyết gắn chặt với đề xuất.** DON đạt đồng thuận về `{verdict, rule}`. Báo cáo mang một chứng thực EIP-712
+- **Phán quyết gắn chặt với đề xuất.** Bước đồng thuận giống hệt của workflow thống nhất về `{verdict, rule}`. Báo cáo mang một chứng thực EIP-712
   gắn với đúng nội dung của đề xuất (`proposalDigest`), chain, receiver và một hạn chót tính theo block, kèm một hash
   bằng chứng mà bất kỳ ai cũng có thể tính lại từ dữ liệu trên chuỗi.
-- **Không bỏ sót đề xuất nào.** Một trình quét cron kiểm tra 20 đề xuất mới nhất mỗi 60 giây và thẩm định mọi đề xuất
-  mà log trigger đã bỏ lỡ, kể cả các bản nâng cấp mà approver đã thông qua thủ công; phủ quyết của trình quét được ưu
-  tiên.
-- **Đang chạy thật trên Ethereum Sepolia.** CRE CLI chính thức đã chạy workflow trên một máy chủ và trả lời bảy đề
-  xuất trên chuỗi: một bản nâng cấp trung thực được thông qua và thực thi, sáu cuộc tấn công bị phủ quyết (R1, R2, R3,
-  R3B, R7, R9). Mọi hợp đồng đều được xác minh trên Sourcify.
-- **Kiểm thử end-to-end.** 117 bài test Foundry, 118 bài unit test cho workflow và 199 mục tự kiểm tra của war room
-  chạy trong [CI](.github/workflows/ci.yml); một script end-to-end trên fork chạy trọn vòng xử lý qua trình mô phỏng
-  CRE.
+- **Log bị bỏ lỡ sẽ được quét lại.** Một trình quét cron kiểm tra 20 đề xuất mới nhất mỗi 60 giây và thẩm định mọi
+  đề xuất mà log trigger đã bỏ lỡ, kể cả các bản nâng cấp mà approver đã thông qua thủ công; phủ quyết của trình quét
+  được ưu tiên. Một đề xuất bị đẩy xuống dưới 20 id mới nhất sẽ không còn được thẩm định: nó vẫn chưa được thông qua,
+  trừ khi approver đã thông qua thủ công ([cửa sổ quét](docs/design.md#the-sweep-window)).
+- **Đang chạy thật trên Ethereum Sepolia.** CRE CLI chính thức đã chạy workflow trên một máy chủ và trả lời mọi đề
+  xuất trên chuỗi (mười đề xuất tính đến 2026-10-23): một bản nâng cấp trung thực được thông qua và thực thi, chín cuộc
+  tấn công bị phủ quyết (R1, R2, R3, R3B, R7, R9). Mọi hợp đồng đều được xác minh trên Sourcify.
+- **Kiểm thử end-to-end.** [CI](.github/workflows/ci.yml) chạy 117 bài test Foundry, 118 bài unit test cho workflow và
+  387 trên 394 mục tự kiểm tra của war room (7 mục còn lại cần kết quả build của forge và cast, mà job CI không có);
+  một script end-to-end trên fork chạy trọn vòng xử lý qua trình mô phỏng CRE.
 
 ## Vấn đề
 
@@ -78,7 +89,7 @@ xảy ra nhiều lần:
 
 Timelock chỉ bắt kẻ tấn công phải chờ, và trong lúc chờ không ai có nghĩa vụ phải để mắt tới. Độ trễ dài còn chặn cả
 các bản vá khẩn cấp. Upgrade Airlock tận dụng chính khoảng chờ đó: một bản nâng cấp không thể chạy cho đến khi được
-một bước kiểm tra độc lập, phi tập trung cho qua, và bước kiểm tra đó tự động chạy trên mọi đề xuất.
+một bước kiểm tra độc lập (phi tập trung khi được triển khai lên một CRE DON) cho qua, và bước kiểm tra đó tự động chạy trên mọi đề xuất.
 
 ## <a id="how-it-works"></a>Cách hoạt động
 
@@ -96,11 +107,11 @@ sequenceDiagram
     Note over Admin: Cửa ngoài: thời gian chờ 25 block, khoảng 5 phút trên Sepolia
     Admin-->>CRE: Log Proposed (EVM log trigger), hoặc trình quét cron mỗi 60 s
     CRE->>Admin: Đọc EVM tại block của đề xuất
-    loop Trên mỗi node DON, với từng nhà cung cấp
+    loop Trên mỗi node (một node trong trình mô phỏng, mọi node DON khi triển khai), với từng nhà cung cấp
         CRE->>RPC: eth_getCode, rồi mô phỏng tấn công eth_simulateV1
         RPC-->>CRE: phán quyết và quy tắc
     end
-    Note over CRE: Quorum: ít nhất 2 câu trả lời, tất cả giống nhau, nếu không thì Veto R6<br/>Đồng thuận DON về phán quyết và quy tắc<br/>hash bằng chứng và chứng thực EIP-712
+    Note over CRE: Quorum: ít nhất 2 câu trả lời, tất cả giống nhau, nếu không thì Veto R6<br/>Đồng thuận giống hệt về phán quyết và quy tắc<br/>hash bằng chứng và chứng thực EIP-712
     CRE->>Fwd: writeReport
     Fwd->>Recv: onReport(metadata, report)
     alt Mọi kiểm tra đều đạt
@@ -129,9 +140,9 @@ sequenceDiagram
    theo dõi được đọc trước và sau, số dư của holder được đọc ngay sau mỗi lời gọi dạng holder, và các event do chính
    từng lần thăm dò phát ra đều được kiểm tra (R1 đến R4, R3B). Cuối cùng, bytecode mới được quét để tìm các opcode
    hành xử khác nhau trên block thật so với trong mô phỏng (R9).
-3. **Đồng thuận.** Mỗi node DON chạy mô phỏng trên bốn nhà cung cấp. Ít nhất hai nhà cung cấp phải trả lời và mọi câu
-   trả lời phải cùng một phán quyết; mọi trường hợp khác đều dẫn đến phủ quyết (R6). Sau đó DON thống nhất trên cùng
-   một `{verdict, rule}`.
+3. **Đồng thuận.** Mỗi node (mọi node DON khi triển khai với DON; hiện nay là trình mô phỏng của CLI) chạy mô phỏng
+   trên bốn nhà cung cấp. Ít nhất hai nhà cung cấp phải trả lời và mọi câu trả lời phải cùng một phán quyết; mọi trường
+   hợp khác đều dẫn đến phủ quyết (R6). Sau đó bước đồng thuận thống nhất trên cùng một `{verdict, rule}`.
 4. **Báo cáo.** Workflow tính hash của một JSON bằng chứng ở dạng chuẩn tắc, ký một phán quyết EIP-712 bằng khóa
    attester của nó (một secret của CRE), và ghi báo cáo thông qua forwarder. `AirlockReceiver` kiểm tra bên gửi, tính
    còn hiệu lực, chữ ký và việc phán quyết được gắn với đúng đề xuất này (`proposalDigest`), rồi gọi `clear`, hoặc
@@ -149,8 +160,9 @@ lần chạy thất bại đều khiến đề xuất không có giấy thông h
 không bao giờ để bản nâng cấp lọt qua. Khi CRE hoàn toàn không thể trả lời, khóa approver có thể thông qua thủ công
 một bản nâng cấp kèm bằng chứng được ghi lại; trình quét vẫn thẩm định bản nâng cấp đó khi CRE trả lời trở lại, và
 phủ quyết của CRE hoặc guardian vẫn được ưu tiên. `breakGlass()` cho phép owner hoặc bất kỳ guardian nào chuyển ngay
-proxy sang một implementation tạm dừng đã đăng ký trước. Thoát khỏi trạng thái tạm dừng là một bản nâng cấp thông
-thường, đi qua cả hai cánh cửa.
+proxy sang một implementation tạm dừng đã đăng ký trước. Thoát khỏi trạng thái tạm dừng là một bản nâng cấp đi qua
+cả hai cánh cửa; một đề xuất đã được thông qua không bao giờ hết hạn, nên một bản nâng cấp được thông qua từ trước
+cũng có thể kết thúc trạng thái tạm dừng ([các giới hạn đã biết](docs/design.md#known-limitations)).
 
 Chi tiết hơn: [docs/design.md](docs/design.md) (mô hình mối đe dọa, máy trạng thái thông hành, ràng buộc báo cáo,
 ngân sách tài nguyên) và [cre/README.md](cre/README.md) (workflow).
@@ -210,7 +222,7 @@ bước từ trigger trên chuỗi đến phán quyết trên chuỗi. Workflow 
 | EVM read (`callContract`) | [`cre/veto/workflow.ts#L114-L122`](cre/veto/workflow.ts#L114-L122), [`#L137-L142`](cre/veto/workflow.ts#L137-L142), [`cre/veto/chain.ts`](cre/veto/chain.ts) | Đề xuất, giấy thông hành, `oracleJudged`, các phê duyệt và số dư, gom lô qua Multicall3 tại block của đề xuất hoặc `LATEST` |
 | EVM read (`headerByNumber`) | [`cre/veto/workflow.ts#L125-L136`](cre/veto/workflow.ts#L125-L136) | Block mới nhất, và hash của block đề xuất dùng làm hạt giống cho người lạ trong mô phỏng |
 | HTTP capability ở node mode | [`cre/veto/workflow.ts#L167-L189`](cre/veto/workflow.ts#L167-L189), [`#L80-L94`](cre/veto/workflow.ts#L80-L94), [`cre/veto/judge.ts#L157-L220`](cre/veto/judge.ts#L157-L220) | Mỗi node gửi `eth_getCode` tới từng nhà cung cấp, sau đó một hoặc hai request `eth_simulateV1` (mỗi request đều dưới giới hạn 120 kb) |
-| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188), quorum trong [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | DON thống nhất về `{verdict, rule}` (tối đa 52 byte) |
+| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188), quorum trong [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | Đồng thuận giống hệt về `{verdict, rule}` (tối đa 52 byte; mọi node DON khi triển khai) |
 | Secrets | [`cre/veto/workflow.ts#L160-L166`](cre/veto/workflow.ts#L160-L166), [`cre/secrets.yaml`](cre/secrets.yaml) | Khóa attester EIP-712, được lấy một lần cho mỗi lần chạy |
 | Report + `writeReport` | [`cre/veto/workflow.ts#L143-L149`](cre/veto/workflow.ts#L143-L149), [`cre/veto/airlock.ts#L229-L282`](cre/veto/airlock.ts#L229-L282), [`cre/veto/report.ts`](cre/veto/report.ts) | `runtime.report` (ECDSA, keccak256) và `evm.writeReport`, sau đó đọc lại đề xuất để xác nhận kết quả |
 | Forwarder + `IReceiver` | [`src/cre/AirlockReceiver.sol#L88-L120`](src/cre/AirlockReceiver.sol#L88-L120), [`#L156-L169`](src/cre/AirlockReceiver.sol#L156-L169), [`src/cre/IReceiver.sol`](src/cre/IReceiver.sol), [`script/DeployEth.s.sol#L142`](script/DeployEth.s.sol#L142) | `onReport` chỉ chấp nhận forwarder đã cấu hình, đồng thời kiểm tra workflow id và owner khi chúng được cấu hình |
@@ -234,8 +246,8 @@ và giá trị đồng thuận tối đa 52 byte. Chi tiết ngân sách nằm t
 
 ## <a id="live-on-sepolia"></a>Đang chạy trên Sepolia
 
-Ethereum Sepolia, chain id 11155111. Được deploy bằng [`script/DeployEth.s.sol`](script/DeployEth.s.sol) tại block
-11950682 (13 giao dịch); mọi hợp đồng đều được xác minh trên Sourcify. Owner, approver, guardian khẩn cấp và attester
+Ethereum Sepolia, chain id 11155111. Được deploy bằng [`script/DeployEth.s.sol`](script/DeployEth.s.sol) trong các
+block 11950684–11950699 (13 giao dịch; AirlockAdmin ở block 11950697); mọi hợp đồng đều được xác minh trên Sourcify. Owner, approver, guardian khẩn cấp và attester
 là bốn khóa khác nhau. Thời gian chờ là 25 block.
 
 | Hợp đồng | Địa chỉ |
@@ -254,7 +266,8 @@ là bốn khóa khác nhau. Thời gian chờ là 25 block.
 | PausedImpl (mục tiêu break-glass) | [`0xb6573006fB607E96966d0F578B96AAB25413F5BE`](https://sepolia.etherscan.io/address/0xb6573006fB607E96966d0F578B96AAB25413F5BE) |
 | Chainlink MockKeystoneForwarder | [`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://sepolia.etherscan.io/address/0x15fC6ae953E024d975e77382eEeC56A9101f9F88) |
 
-Bảy đề xuất, bảy phán quyết trên chuỗi. Block trong mỗi liên kết là block chứa giao dịch đó; `(+n)` là số block tính
+Lượt chạy đầu tiên: bảy đề xuất, bảy phán quyết trên chuỗi (các lượt sau #8–#10 được liệt kê trong
+[docs/evidence/sepolia-live.md](docs/evidence/sepolia-live.md)). Block trong mỗi liên kết là block chứa giao dịch đó; `(+n)` là số block tính
 từ đề xuất đến khi phán quyết của CRE được ghi lên chuỗi.
 
 | Thẻ | Đề xuất | Phán quyết CRE | Tx đề xuất | Tx báo cáo | Sau đó |
@@ -296,7 +309,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 bài test: quy tắc, thăm dò, bytecode, báo cáo, ngân sách, handler
 
 # war room
-(cd web && npm ci && npm run selftest)            # 199 mục kiểm tra: chế độ xem trực tiếp và phát lại offline
+(cd web && npm ci && npm run selftest)            # 394 mục kiểm tra: chế độ xem trực tiếp và bộ chọn tấn công, phát lại offline, API vận hành
 ```
 
 ### End-to-end trên fork Sepolia
@@ -326,7 +339,8 @@ phỏng CRE với `--broadcast` và kiểm tra mọi kết quả trên chuỗi:
 ### Bộ công cụ vận hành Sepolia
 
 [`scripts/sepolia/`](scripts/sepolia/README.md) vận hành demo trực tiếp. Các khóa nằm ngoài repo, mỗi khóa hex nằm
-trong một file riêng trong `KEY_DIR` (`owner`, `attester`, `sender`, `approver`, `emergency`); các script không bao
+trong một file riêng trong `KEY_DIR` (`owner.key`, `attester.key`, `sender.key`, `approver.key`,
+`emergency.key`, cùng một `sweeper.key` tùy chọn); các script không bao
 giờ in chúng ra, và `deploy.sh` từ chối chạy trừ khi owner, approver, guardian khẩn cấp và attester là bốn khóa khác
 nhau. Mọi script cũng chạy được trên một fork cục bộ với `FORK=<port>`, nên có thể diễn tập demo mà không tốn chi phí
 nào.
@@ -354,8 +368,16 @@ npm run dev                     # http://127.0.0.1:5173/
 npm run build:airlock           # đồng bộ deployments/sepolia.json vào trang, build web/dist-airlock
 ```
 
-War room đọc Sepolia trực tiếp và không bao giờ ký hay gửi giao dịch. Nó hiển thị mỗi đề xuất như một khoang khóa khí:
-thời gian chờ, giấy thông hành CRE, phủ quyết kèm quy tắc và bằng chứng.
+Trang đọc Sepolia trực tiếp; nó không giữ khóa nào và không bao giờ ký hay gửi giao dịch. Nó hiển thị mỗi đề xuất như
+một khoang khóa khí: thời gian chờ, giấy thông hành CRE, phủ quyết kèm quy tắc và bằng chứng. Khách truy cập chọn một
+trong bảy thẻ (sáu kiểu tấn công và bản nâng cấp trung thực v2) và xem bản phát lại (có ghi rõ) của đề xuất thật mới
+nhất cùng loại trên Sepolia (hoặc đề xuất trực tiếp khi nó đang trong thời gian chờ): xem [bộ chọn tấn
+công](web/README.md#attack-picker-what-a-visitor-sees). Người trình bày có thêm chế độ vận hành (`web/operator/`,
+`web/functions/`): trên máy chủ dev chỉ nhận kết nối loopback, trên Cloudflare Pages cần token và chỉ bật khi có đủ cả
+hai secret `OWNER_KEY` và `OPERATOR_TOKEN`. Chế độ này gửi một trong cùng bảy đề xuất cố định qua `POST
+/api/operator/propose`, được ký phía máy chủ bằng khóa owner (thiết kế vốn đã giả định khóa này bị lộ: nó chỉ có thể
+đề xuất), và trang của khách truy cập không bao giờ gọi nó: xem [chế độ vận
+hành](web/README.md#operator-mode-real-attacks-on-sepolia).
 
 | Tham số URL | Tác dụng |
 |---|---|
@@ -363,8 +385,10 @@ thời gian chờ, giấy thông hành CRE, phủ quyết kèm quy tắc và b�
 | `?mode=offline` | Phát lại một lần chạy đã ghi, hoàn toàn không cần kết nối mạng |
 | `?lang=en`, `?lang=zh-TW`, `?lang=zh-CN` | Ngôn ngữ giao diện (mặc định `zh-CN`; phím `L` chuyển vòng giữa các ngôn ngữ) |
 | `?rpc=http://127.0.0.1:<port>` | Chuyển sang đọc một fork Sepolia cục bộ, dùng để diễn tập |
+| `?op=1` | Chế độ vận hành: yêu cầu nhập token vận hành (chỉ dành cho người trình bày) |
 
-Nhấn `P` ở chế độ trực tiếp để phát lại các đề xuất gần đây nhất từ các event trên chuỗi của chúng.
+Nhấn `P` ở chế độ trực tiếp để phát lại các đề xuất gần đây nhất từ các event trên chuỗi của chúng, và `1` đến `7` để
+phát lại một thẻ của bộ chọn.
 
 ## Cấu trúc repository
 
@@ -386,6 +410,7 @@ cre/scripts/fork-e2e.sh         end-to-end trên fork anvil của Sepolia
 cre/setup.sh                    CRE CLI và bun đã ghim phiên bản
 scripts/sepolia/                bộ công cụ vận hành demo trực tiếp, kèm các unit systemd cho máy chủ
 web/                            war room (Vite, TypeScript, viem)
+web/operator/, web/functions/   chế độ vận hành: bảy đề xuất cố định ký phía máy chủ (máy chủ dev, Pages Functions)
 deployments/sepolia.json        bản deploy đang chạy
 docs/design.md                  mô hình mối đe dọa, máy trạng thái thông hành, ràng buộc báo cáo, ngân sách
 docs/evidence/                  bản ghi lần chạy thực tế
@@ -413,7 +438,8 @@ attester là bốn địa chỉ khác nhau.
 **Khóa owner bị lộ có thể đề xuất.** Mọi đề xuất phải chờ hết thời gian chờ một cách công khai trong khi CRE thẩm định
 nó, và cần một giấy thông hành mà owner không thể tự cấp cho mình. Owner cũng có thể kéo phanh khẩn cấp
 (`breakGlass`), thao tác này chỉ chuyển proxy sang implementation tạm dừng đã đăng ký trước; muốn thoát khỏi trạng
-thái đó thì phải là một bản nâng cấp đi qua cả hai cánh cửa.
+thái đó thì phải là một bản nâng cấp đi qua cả hai cánh cửa, và một bản nâng cấp được thông qua từ trước nhưng chưa
+từng thực thi cũng có thể kết thúc nó.
 
 **Cũng chính khóa đó không thể:**
 
@@ -430,6 +456,11 @@ thái đó thì phải là một bản nâng cấp đi qua cả hai cánh cửa.
 Việc approver thông qua thủ công là cơ chế ghi đè dành cho lúc CRE không thể trả lời: trình quét vẫn thẩm định đề
 xuất đó khi nó còn nằm trong 20 id mới nhất, và phủ quyết của CRE hoặc guardian sẽ được ưu tiên. Mô hình mối đe dọa
 đầy đủ nằm trong [docs/design.md](docs/design.md#threat-model).
+
+Đây là các hợp đồng demo trên testnet với những giới hạn đã biết, mỗi giới hạn được cố định bằng một bài test đang đạt:
+việc thông qua không bao giờ hết hạn, khóa owner không thể thay (khóa bị đánh cắp có thể tạm dừng token lại sau mỗi
+lần bỏ tạm dừng), và một guardian xấu duy nhất có thể giữ token ở trạng thái tạm dừng. Danh sách nằm trong
+[docs/design.md](docs/design.md#known-limitations).
 
 ## Công nghệ sử dụng
 

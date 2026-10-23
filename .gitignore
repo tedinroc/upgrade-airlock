@@ -16,6 +16,9 @@ dist/
 .env.*
 !.env.example
 *.key
+# operator-mode token files (web/README.md: keys/operator.token) and their temporary copies
+*.token
+*.token.*
 keystore/
 .dev.vars*
 # wrangler's local scratch (bundles with absolute local paths)

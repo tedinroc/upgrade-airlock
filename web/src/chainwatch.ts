@@ -5,7 +5,8 @@
 //    from its proposal block on (CHAIN.historySpan blocks), so the page has content before anything happens live;
 //  - verdict cost = receipt gasUsed x effectiveGasPrice; "N seconds after the proposal" uses block timestamps;
 //  - the attack picker (lab.ts) needs each card's newest judged proposal: when one is older than the recent ones,
-//    older ids are read too (backfillLab), at most CONFIG.labScanMax of them.
+//    older ids are read too (backfillLab), at most CONFIG.labScanMax of them;
+//  - ?p=<id> of a proposal older than the recent ones: that one is read too, first (loadPicked).
 // Only eth_call / eth_getLogs / eth_getTransactionReceipt / eth_getBlockByNumber: nothing is signed or sent.
 import { decodeFunctionResult, encodeFunctionData, numberToHex, pad, toEventSelector, type Hex } from 'viem'
 import { ADMIN_ABI, RECEIVER_ABI } from './abi'
@@ -15,7 +16,7 @@ import { CONFIG } from './config'
 import { blockTs, handleLog, loadImplNames, pickActive, type LogHooks } from './events'
 import { msg } from './i18n'
 import { playbackGate, replay } from './playback'
-import { CHAIN } from './runtime'
+import { CHAIN, PICK } from './runtime'
 import { newProposal, store, type StreamLine } from './store'
 import { isZero32 } from './types'
 import { AUTOPLAY_CARD, LAB_IDS, labIdOf, labSatisfied, pickFor, type LabId } from './lab'
@@ -29,8 +30,9 @@ const topicOf = (abi: readonly unknown[], name: string): Hex =>
 /** topic0 of every log the page reads (one getLogs call covers both contracts) */
 export const TOPICS: Hex[] = [...ADMIN_EVENTS.map((e) => topicOf(ADMIN_ABI, e)), topicOf(RECEIVER_ABI, 'Verdict')]
 
-/** Health of the log feed (top bar) */
-export const chainHealth = { logsLink: 'down' as 'ws' | 'poll' | 'down', cursor: 0, lastError: '', loadedRecent: false }
+/** Health of the log feed (top bar). pickMissing: the ?p=<id> the chain has no proposal for (yet), so the hero says
+ *  "no proposal #id" instead of "the airlock is empty" */
+export const chainHealth = { logsLink: 'down' as 'ws' | 'poll' | 'down', cursor: 0, lastError: '', loadedRecent: false, pickMissing: null as string | null }
 
 // ---------- HTTP JSON-RPC: rotate endpoints, 8 s timeout, up to 4 tries ----------
 // Two rotations: the head (calls, block numbers, receipts, the live log cursor) and history (eth_getLogs of past
@@ -303,6 +305,8 @@ async function loadRecent() {
       pickActive()
       store.emit()
       const known = new Map(props.filter(([, cp]) => Number(cp.status) !== 0).map(([id, cp]) => [String(id), cp]))
+      // ?p=<id> older than the recent ones (or not proposed yet): read it first, it is what the viewer asked to see
+      if (PICK && !known.has(PICK) && !playbackGate.loaded.has(PICK)) chainHealth.pickMissing = (await loadPicked(PICK, next, head)) ? null : PICK
       const cardOf = (id: string) => {
         const p = store.proposals.get(id)
         return p ? labIdOf(p, store.implNames) : null
@@ -334,6 +338,27 @@ async function loadRecent() {
       await new Promise((r) => setTimeout(r, Math.min(10000, 2000 * (attempt + 1))))
     }
   }
+}
+
+// ---------- ?p=<id>: a proposal outside the recent ones ----------
+/** Read one proposal the recent window does not hold (?p=<id> of an older one) with its logs, like a recent proposal.
+ *  Returns false, reading nothing more, when the chain has no such proposal (yet): id >= nextId, or status None. */
+export async function loadPicked(id: string, next: number, head: number): Promise<boolean> {
+  const n = Number(id)
+  if (!Number.isSafeInteger(n) || n < 1 || n >= next) return false
+  const [cp, cl] = await Promise.all([readAdmin<ChainProposal>('getProposal', [BigInt(n)]), readAdmin<Hex>('clearanceOf', [BigInt(n)])])
+  if (Number(cp.status) === 0) return false
+  applyProposal(id, cp, cl)
+  pickActive()
+  store.emit()
+  const from = Number(cp.proposedBlock)
+  // the head this page knows may lag behind the proposal: read it then
+  if (Math.max(head, blocks.latest) < from) head = parseInt(await call<Hex>('eth_blockNumber', []), 16)
+  const logs = await getLogsSpan(from, Math.min(from + CHAIN.historySpan - 1, Math.max(head, blocks.latest)), pad(numberToHex(BigInt(n)), { size: 32 }), true)
+  for (const l of logs.sort((a, b) => ord(a) - ord(b))) handleLog(l, false, liveHooks)
+  playbackGate.loaded.add(id)
+  store.emit()
+  return true
 }
 
 // ---------- attack picker: older proposals of a card missing from the recent ones ----------

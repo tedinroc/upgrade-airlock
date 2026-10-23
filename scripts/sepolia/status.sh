@@ -5,7 +5,11 @@
 #
 #   scripts/sepolia/status.sh [N]              # live Sepolia (default N = 10)
 #   FORK=19631 scripts/sepolia/status.sh [N]
-# Env: EVENTS_FROM=<block> starts the event scan later than the deployment block (for RPCs that cap eth_getLogs).
+# Every read is retried on a transient RPC error (RPC_TRIES, default 3). The verdict events are scanned from the
+# deployment block in windows, on SEPOLIA_RPC and then an RPC that keeps the full history (lib.sh events_since;
+# HISTORY_RPC overrides the list, EVENTS_FROM=<block> starts the scan later). When no RPC serves a window, the rows in
+# it show '-' for by, rule, evidence and verdict tx, and the header line ("proposals so far: N") still shows that the
+# chain is reachable.
 source "$(dirname "$0")/lib.sh"
 N=${1:-10}
 [[ "$N" =~ ^[0-9]+$ ]] || die "usage: [FORK=<port>] $0 [N]"
@@ -13,15 +17,15 @@ check_rpc
 GA=$(dep airlockAdmin)
 PROXY=$(dep proxy)
 NOW=$(block_now)
-NEXT=$(cast call "$GA" 'nextId()(uint256)' --rpc-url "$RPC")
-DELAY=$(cast call "$GA" 'delayBlocks()(uint64)' --rpc-url "$RPC")
-PAUSED=$(cast call "$GA" 'paused()(bool)' --rpc-url "$RPC")
-IMPL=$(cast parse-bytes32-address "$(cast storage "$PROXY" "$IMPL_SLOT" --rpc-url "$RPC")")
+NEXT=$(rpc_retry cast call "$GA" 'nextId()(uint256)' --rpc-url "$RPC")
+DELAY=$(rpc_retry cast call "$GA" 'delayBlocks()(uint64)' --rpc-url "$RPC")
+PAUSED=$(rpc_retry cast call "$GA" 'paused()(bool)' --rpc-url "$RPC")
+IMPL=$(cast parse-bytes32-address "$(rpc_retry cast storage "$PROXY" "$IMPL_SLOT" --rpc-url "$RPC")")
 RX=$(dep receiver)
 say "Upgrade Airlock on $NET, block $NOW"
 say "  AirlockAdmin $(addr_ref "$GA")"
 say "  delay $DELAY blocks (~$(fmt_secs $((DELAY * SEPOLIA_BLOCK_SECS))) at 12 s blocks); proposals so far: $((NEXT - 1)); proxy implementation: $(impl_name "$IMPL")$([ "$PAUSED" = true ] && echo ' (PAUSED)')"
-say "  receiver is guardian: $(cast call "$GA" 'isGuardian(address)(bool)' "$RX" --rpc-url "$RPC"); guardians: $(cast call "$GA" 'guardianCount()(uint256)' --rpc-url "$RPC")"
+say "  receiver is guardian: $(rpc_retry cast call "$GA" 'isGuardian(address)(bool)' "$RX" --rpc-url "$RPC"); guardians: $(rpc_retry cast call "$GA" 'guardianCount()(uint256)' --rpc-url "$RPC")"
 [ "$NEXT" -gt 1 ] || exit 0
 
 EV=$(events_since "$(dep startBlock)")
@@ -30,7 +34,7 @@ FIRST=$((NEXT - N))
 C=0 V=0 P=0 X=0 W=0
 ROWS=()
 for ((id = FIRST; id < NEXT; id++)); do
-  read -r KIND ST TARGET READY _ PBLOCK < <(proposal "$id")
+  read -r KIND ST TARGET READY _ PBLOCK < <(proposal "$id") || die "could not read proposal #$id from $RPC (try again, or set SEPOLIA_RPC)"
   CL=$(clearance "$id")
   STATE_N=$(state_name "$ST" "$CL")
   CRE=$(oracle_judged "$id")

@@ -44,8 +44,11 @@ export const configSchema = z
      * none: any such opcode in the new code vetoes unless its codehash is approved.
      */
     allowedOpcodes: z.array(z.enum(DANGEROUS_OPCODE_NAMES)).max(DANGEROUS_OPCODE_NAMES.length).default([]),
-    /** Gas limit for the forwarder -> receiver.onReport -> AirlockAdmin.veto + attachReason / clear path. */
-    gasLimit: z.string().regex(/^\d+$/).default('500000'),
+    /**
+     * Gas limit for the forwarder -> receiver.onReport -> AirlockAdmin.veto + attachReason / clear path. A Veto report
+     * used up to about 524k gas in the fork end-to-end run, a Clear about 397k: the default leaves room for both.
+     */
+    gasLimit: z.string().regex(/^\d+$/).default('2000000'),
     /** A verdict is accepted on-chain until max(readyBlock, current block) + this many blocks (no clock involved). */
     reportGraceBlocks: z.number().int().nonnegative().default(50),
     /** The log trigger only runs at LATEST: a proposal is judged in the block it appears, long before readyBlock. */

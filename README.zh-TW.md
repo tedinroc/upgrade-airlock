@@ -9,6 +9,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live demo](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
+[![Demo video](https://img.shields.io/badge/demo%20video-watch-red)](https://upgrade-airlock.pages.dev/video/)
 [![Ethereum Sepolia](https://img.shields.io/badge/Ethereum-Sepolia-627EEA?logo=ethereum&logoColor=white)](https://sepolia.etherscan.io/address/0x28e7aAC40560804F480e454bF9C12F50C83b700B)
 [![Chainlink CRE](https://img.shields.io/badge/Chainlink-CRE-375BD2?logo=chainlink&logoColor=white)](#chainlink-cre)
 
@@ -18,21 +19,21 @@
 
 ## 概覽
 
-Upgrade Airlock 為每一次合約升級設下兩道門。**外門**是以區塊計算的冷靜期；**內門**則要等 Chainlink CRE 工作流程在四家獨立 RPC 供應商的模擬器中對新實作發動攻擊、所有回答一致、DON 對判決達成共識，而且一份經過簽章的**放行**（Clear）報告已經上鏈，才會開啟。惡意實作拿到的則是一份經過簽章的**否決**（Veto），永遠無法執行，即使攻擊者握有升級金鑰也一樣。專為 ETH Shenzhen 2026 打造，部署於 Ethereum Sepolia。
+Upgrade Airlock 為每一次合約升級設下兩道門。**外門**是以區塊計算的冷靜期；**內門**則要等鏈上記錄了放行才會開啟。自動放行的條件是：Chainlink CRE 工作流程已在模擬器中對新實作發動攻擊並查詢四家獨立的 RPC 供應商，至少兩家回答且所有回答一致，工作流程的共識步驟（`consensusIdenticalAggregation`）對判決達成一致，而且一份經過簽章的**放行**（Clear）報告已經上鏈。CRE 完全無法給出判決時，approver（核准人）金鑰可以附上記錄在案的證據手動放行；只要該提案仍在最新的 20 個 id 之內，定時掃描照樣會補判，CRE 或 guardian 的否決優先。被攻擊搜尋涵蓋到的惡意實作拿到的則是一份經過簽章的**否決**（Veto），不會被執行，即使攻擊者握有升級金鑰也一樣；有邊界的搜尋涵蓋不到的部分，由嚴格模式再加一道人工程式碼審查。目前的判決來自伺服器上執行本工作流程的官方 CRE CLI（`cre workflow simulate --broadcast`）；同一套工作流程與合約程式碼可以部署到 DON 上。專為 ETH Shenzhen 2026 打造，部署於 Ethereum Sepolia。
 
 > [!TIP]
-> **線上展示：[upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)**
+> **線上展示：[upgrade-airlock.pages.dev](https://upgrade-airlock.pages.dev)** · **展示影片：[upgrade-airlock.pages.dev/video](https://upgrade-airlock.pages.dev/video/)**（簡體中文與英文）
 >
-> 戰情室直接在你的瀏覽器中讀取 Ethereum Sepolia，全程唯讀。每個提案都呈現為一座氣閘：**外門**記錄提案，**氣閘艙**倒數冷靜期，**內門**則一直鎖著，直到 Chainlink CRE 的放行（Clear）上鏈為止。否決（Veto）會把提案彈出氣閘，並附上對應的規則、證據雜湊與交易。頁面預設為簡體中文：[`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) 切換為英文，[`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) 切換為繁體中文。頁面背後的每一筆交易都列在[上線執行證據](docs/evidence/sepolia-live.md)中。
+> 戰情室直接在你的瀏覽器中讀取 Ethereum Sepolia，全程唯讀。每個提案都呈現為一座氣閘：**外門**記錄提案，**氣閘艙**倒數冷靜期，**內門**則一直鎖著，直到放行上鏈為止（Chainlink CRE 的放行，或 approver 的手動放行，戰情室會標明是手動放行）。否決（Veto）會把提案彈出氣閘，並附上對應的規則、證據雜湊與交易。第一次開啟時是攻擊選擇器：每張卡（六種攻擊與正常升級 v2）重播同類在 Sepolia 上最新的一筆真實提案，並標明是重播。頁面預設為簡體中文：[`?lang=en`](https://upgrade-airlock.pages.dev/?lang=en) 切換為英文，[`?lang=zh-TW`](https://upgrade-airlock.pages.dev/?lang=zh-TW) 切換為繁體中文。頁面背後的交易（提案 #1–#10）都列在[上線執行證據](docs/evidence/sepolia-live.md)中。
 
 ## <a id="highlights"></a>亮點
 
 - **設計上就是失效即關閉（fail-closed）。** 鏈上有放行，升級才能執行。漏接事件、RPC 中斷、供應商結果不一致或執行失敗，都只會讓提案維持未放行或遭到否決：最多延後升級，絕不會讓升級闖關。否決永遠優先於放行。
-- **以攻擊檢驗，而非照表打勾。** 每個 DON 節點都在四家 RPC 供應商上，以 `eth_simulateV1` 對代理合約的真實狀態執行這次升級。一個備有資金的陌生地址會呼叫新位元組碼中的每一個選擇器，並以代入持有人的參數組合呼叫每一個新函式，再比對前後的總供給量、擁有權與餘額。至少要有兩家供應商回應，而且所有回應必須一致。
-- **判決與提案綁定。** DON 對 `{verdict, rule}` 達成共識。報告附帶一份 EIP-712 證明（attestation），綁定提案的確切內容（`proposalDigest`）、鏈、接收合約與區塊期限，另附一個任何人都能從鏈上資料重新算出的證據雜湊。
-- **沒有任何提案漏判。** cron 定時掃描每 60 秒檢查最新的 20 個提案，凡是 log trigger 漏掉的都會補上判定，包括 approver（核准人）手動放行的升級；它的否決優先。
-- **已在 Ethereum Sepolia 上線。** 官方 CRE CLI 在伺服器上執行這個工作流程，並在鏈上回應了七個提案：一次正常升級獲得放行並完成執行，六次攻擊遭到否決（R1、R2、R3、R3B、R7、R9）。所有合約都已在 Sourcify 完成驗證。
-- **端對端完整測試。** 117 個 Foundry 測試、118 個工作流程單元測試與 199 項戰情室自我檢測都在 [CI](.github/workflows/ci.yml) 中執行；分叉鏈端對端腳本則透過 CRE 模擬器跑完整個流程。
+- **以攻擊檢驗，而非照表打勾。** 工作流程（部署到 DON 時在每個節點上）在四家 RPC 供應商上，以 `eth_simulateV1` 對代理合約的真實狀態執行這次升級。一個備有資金的陌生地址會呼叫新位元組碼中的每一個選擇器，並以代入持有人的參數組合呼叫每一個新函式，再比對前後的總供給量、擁有權與餘額。至少要有兩家供應商回應，而且所有回應必須一致。
+- **判決與提案綁定。** 工作流程的一致共識步驟對 `{verdict, rule}` 達成一致。報告附帶一份 EIP-712 證明（attestation），綁定提案的確切內容（`proposalDigest`）、鏈、接收合約與區塊期限，另附一個任何人都能從鏈上資料重新算出的證據雜湊。
+- **漏掉的日誌會被補判。** cron 定時掃描每 60 秒檢查最新的 20 個提案，凡是 log trigger 漏掉的都會補上判定，包括 approver（核准人）手動放行的升級；它的否決優先。被擠出最新 20 個 id 之外的提案不再被判定：除非 approver 已手動放行，否則它保持未放行（見[掃描視窗](docs/design.md#the-sweep-window)）。
+- **已在 Ethereum Sepolia 上線。** 官方 CRE CLI 在伺服器上執行這個工作流程，並在鏈上回應了每一個提案（截至 2026-10-23 共十個）：一次正常升級獲得放行並完成執行，九次攻擊遭到否決（R1、R2、R3、R3B、R7、R9）。所有合約都已在 Sourcify 完成驗證。
+- **端對端完整測試。** 117 個 Foundry 測試、118 個工作流程單元測試，以及 394 項戰情室自我檢測中的 387 項，都在 [CI](.github/workflows/ci.yml) 中執行（其餘 7 項需要 forge 編譯產物與 cast，CI 工作中沒有）；分叉鏈端對端腳本則透過 CRE 模擬器跑完整個流程。
 
 ## 要解決的問題
 
@@ -42,7 +43,7 @@ Upgrade Airlock 為每一次合約升級設下兩道門。**外門**是以區塊
 - **Ankr，2022 年 12 月。** 攻擊者利用遭盜用的部署者金鑰，把 aBNBc 的實作換成不檢查權限就能鑄幣的版本，鑄出 60 兆枚 aBNBc。（[Ankr 官方報告](https://www.ankr.com/blog/the-abnbc-token-report/)）
 - **Radiant Capital，2024 年 10 月。** 攻擊者控制 11 位多簽簽署人中的 3 位，接管借貸池的 provider 合約，並升級借貸池的實作，掏走超過 5,300 萬美元。（[rekt.news](https://rekt.news/radiant-capital-rekt2)）
 
-時間鎖只是讓攻擊者多等一會兒，而等待期間沒有人有義務去檢查；拉長延遲又會卡住緊急修補。Upgrade Airlock 讓等待本身發揮作用：升級必須先通過一項獨立、去中心化的檢查才能執行，而每一個提案都會自動接受這項檢查。
+時間鎖只是讓攻擊者多等一會兒，而等待期間沒有人有義務去檢查；拉長延遲又會卡住緊急修補。Upgrade Airlock 讓等待本身發揮作用：升級必須先通過一項獨立的檢查（部署到 CRE DON 後即為去中心化）才能執行，而每一個提案都會自動接受這項檢查。
 
 ## <a id="how-it-works"></a>運作方式
 
@@ -60,11 +61,11 @@ sequenceDiagram
     Note over Admin: 外門：25 個區塊的冷靜期，在 Sepolia 上約 5 分鐘
     Admin-->>CRE: Proposed 事件（EVM log trigger），或每 60 秒一次的 cron 定時掃描
     CRE->>Admin: 在提案區塊進行 EVM 讀取
-    loop 每個 DON 節點，對每家供應商
+    loop 每個節點（模擬器中為一個，部署後為每個 DON 節點），對每家供應商
         CRE->>RPC: eth_getCode，接著執行 eth_simulateV1 攻擊模擬
         RPC-->>CRE: 判決與規則
     end
-    Note over CRE: Quorum：至少 2 個回答且全部一致，否則否決 R6<br/>DON 對判決與規則取得共識<br/>證據雜湊與 EIP-712 證明
+    Note over CRE: Quorum：至少 2 個回答且全部一致，否則否決 R6<br/>對判決與規則取得一致共識<br/>證據雜湊與 EIP-712 證明
     CRE->>Fwd: writeReport
     Fwd->>Recv: onReport(metadata, report)
     alt 所有檢查都通過
@@ -79,12 +80,12 @@ sequenceDiagram
 
 1. **提案。** `AirlockAdmin` 掌管 OpenZeppelin `ProxyAdmin` 以及代幣的 `Ownable` 擁有權。owner 金鑰只能提案：它永遠不會是 guardian（守護者）、approver（核准人）或放行預言機。每個提案（升級，或是對氣閘本身的變更：guardian、冷靜期、緊急暫停目標）都會得到 `readyBlock = block.number + delayBlocks`。升級與緊急暫停的目標必須是一般的合約程式碼：EIP-7702 委派帳戶的金鑰能在判決之後把它改指到別處，因此一律拒絕（`DelegatedAccount`）。
 2. **判定。** `Proposed` 事件一發出，CRE 的 log trigger 就會觸發。對氣閘本身的變更以鏈上讀取判定（R7）。升級先通過靜態規則（R5、R8），再進行固定在提案區塊上的攻擊模擬：把代理合約的 ERC-1967 實作槽覆寫成新程式碼，並讓一個全新的陌生地址（由提案區塊的雜湊推導而來）像真實使用者一樣備有資金：它從第二位持有人那裡取得代幣，也持有 ETH。持有人先完成一筆轉帳，陌生地址在沒有授權額度的情況下呼叫 `transferFrom`，接著以五種參數組合呼叫新位元組碼中找到的每一個選擇器。不屬於標準代幣介面的選擇器，還會再以代入持有人的參數組合呼叫：備有資金的持有人輪流放進前四個參數欄位，測試金額放進另一欄，其餘欄位填入陌生地址或代理合約地址。前後都會讀取總供給量、owner 與每個受監看的餘額，每次代入持有人的呼叫之後立即讀取持有人的餘額，並檢查每一次探測自身發出的事件（R1 到 R4、R3B）。最後掃描新位元組碼，找出在真實區塊與模擬中行為不同的操作碼（R9）。
-3. **共識。** 每個 DON 節點都在四家供應商上執行模擬。至少要有兩家回應，而且所有回應必須是同一個判決；其他情況一律否決（R6）。接著 DON 對完全相同的 `{verdict, rule}` 達成共識。
+3. **共識。** 每個節點（DON 部署中為每個 DON 節點；目前為 CLI 模擬器）都在四家供應商上執行模擬。至少要有兩家回應，而且所有回應必須是同一個判決；其他情況一律否決（R6）。接著共識步驟對完全相同的 `{verdict, rule}` 達成一致。
 4. **報告。** 工作流程對標準化的證據 JSON 計算雜湊，以 attester 金鑰（CRE secret）簽署一份 EIP-712 判決，再透過 forwarder 寫入報告。`AirlockReceiver` 檢查發送者、時效、簽章，以及判決是否綁定到這個提案本身（`proposalDigest`），然後在 `AirlockAdmin` 上呼叫 `clear`，或是 `veto` 與 `attachReason`。
 5. **執行。** 冷靜期結束後，任何人都可以呼叫 `execute(id)`。冷靜期內會以 `TooEarly` revert，沒有放行會以 `NotCleared` revert，被否決後會以 `ProposalVetoed` revert；目標地址上的程式碼若已不是當初提案並經判定的那一份，則以 `CodehashChanged` revert。否決永遠優先於放行。
 6. **定時掃描。** cron trigger 每 60 秒重新檢查最新的提案，凡是仍待處理、CRE 尚未回應的（`oracleJudged`）都會加以判定：log trigger 漏接的事件、大到無法投遞的 `Proposed` 事件，或是 approver 手動放行的升級。它的否決優先於那次手動放行。
 
-**所有失敗都導向同一個方向。** 漏接事件、RPC 中斷、供應商結果不一致或執行失敗，結果都是提案未獲放行或遭到否決：只會延後升級，絕不會讓升級通過。CRE 完全無法回應時，approver 金鑰可以附上記錄在案的證據手動放行；CRE 恢復回應後，定時掃描仍會判定這次升級，CRE 或 guardian 的否決依然優先。`breakGlass()` 讓 owner 或任一 guardian 立即把代理合約切換到事先登記的暫停實作；離開暫停狀態則是一次普通的升級，同樣要通過兩道門。
+**所有失敗都導向同一個方向。** 漏接事件、RPC 中斷、供應商結果不一致或執行失敗，結果都是提案未獲放行或遭到否決：只會延後升級，絕不會讓升級通過。CRE 完全無法回應時，approver 金鑰可以附上記錄在案的證據手動放行；CRE 恢復回應後，定時掃描仍會判定這次升級，CRE 或 guardian 的否決依然優先。`breakGlass()` 讓 owner 或任一 guardian 立即把代理合約切換到事先登記的暫停實作；離開暫停狀態則是一次升級，同樣要通過兩道門；已放行的提案永不過期，因此較早放行的升級也能結束暫停（見[已知限制](docs/design.md#known-limitations)）。
 
 更多細節：[docs/design.md](docs/design.md)（威脅模型、放行狀態機、報告綁定、預算），以及 [cre/README.md](cre/README.md)（工作流程本身）。
 
@@ -125,7 +126,7 @@ CRE 是 Upgrade Airlock 的編排層：工作流程是通過內門唯一的自�
 | EVM 讀取（`callContract`） | [`cre/veto/workflow.ts#L114-L122`](cre/veto/workflow.ts#L114-L122)、[`#L137-L142`](cre/veto/workflow.ts#L137-L142)、[`cre/veto/chain.ts`](cre/veto/chain.ts) | 提案、放行、`oracleJudged`、核准紀錄與餘額，透過 Multicall3 在提案區塊或 `LATEST` 批次讀取 |
 | EVM 讀取（`headerByNumber`） | [`cre/veto/workflow.ts#L125-L136`](cre/veto/workflow.ts#L125-L136) | 最新區塊，以及用來推導模擬陌生地址的提案區塊雜湊 |
 | node mode 下的 HTTP capability | [`cre/veto/workflow.ts#L167-L189`](cre/veto/workflow.ts#L167-L189)、[`#L80-L94`](cre/veto/workflow.ts#L80-L94)、[`cre/veto/judge.ts#L157-L220`](cre/veto/judge.ts#L157-L220) | 每個節點對每家供應商先送出 `eth_getCode`，再送出一到兩個 `eth_simulateV1` 請求（每個都在 120 kb 的請求上限內） |
-| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188)，quorum 位於 [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | DON 對 `{verdict, rule}` 達成共識（最多 52 位元組） |
+| `consensusIdenticalAggregation` | [`cre/veto/workflow.ts#L184-L188`](cre/veto/workflow.ts#L184-L188)，quorum 位於 [`cre/veto/judge.ts#L244-L277`](cre/veto/judge.ts#L244-L277) | 對 `{verdict, rule}` 達成一致共識（最多 52 位元組；部署後為每個 DON 節點） |
 | Secrets | [`cre/veto/workflow.ts#L160-L166`](cre/veto/workflow.ts#L160-L166)、[`cre/secrets.yaml`](cre/secrets.yaml) | EIP-712 attester 金鑰，每次執行只取一次 |
 | Report + `writeReport` | [`cre/veto/workflow.ts#L143-L149`](cre/veto/workflow.ts#L143-L149)、[`cre/veto/airlock.ts#L229-L282`](cre/veto/airlock.ts#L229-L282)、[`cre/veto/report.ts`](cre/veto/report.ts) | `runtime.report`（ECDSA、keccak256）與 `evm.writeReport`，之後再讀取提案以確認結果 |
 | Forwarder + `IReceiver` | [`src/cre/AirlockReceiver.sol#L88-L120`](src/cre/AirlockReceiver.sol#L88-L120)、[`#L156-L169`](src/cre/AirlockReceiver.sol#L156-L169)、[`src/cre/IReceiver.sol`](src/cre/IReceiver.sol)、[`script/DeployEth.s.sol#L142`](script/DeployEth.s.sol#L142) | `onReport` 只接受設定好的 forwarder，若有設定，也會檢查 workflow id 與 owner |
@@ -138,7 +139,7 @@ CRE 是 Upgrade Airlock 的編排層：工作流程是通過內門唯一的自�
 
 ## <a id="live-on-sepolia"></a>Sepolia 上線實況
 
-Ethereum Sepolia，chain id 11155111。以 [`script/DeployEth.s.sol`](script/DeployEth.s.sol) 於區塊 11950682 部署（13 筆交易）；所有合約都已在 Sourcify 完成驗證。owner、approver、緊急 guardian 與 attester 是四把不同的金鑰。冷靜期為 25 個區塊。
+Ethereum Sepolia，chain id 11155111。以 [`script/DeployEth.s.sol`](script/DeployEth.s.sol) 於區塊 11950684–11950699 部署（13 筆交易；AirlockAdmin 位於區塊 11950697）；所有合約都已在 Sourcify 完成驗證。owner、approver、緊急 guardian 與 attester 是四把不同的金鑰。冷靜期為 25 個區塊。
 
 | 合約 | 地址 |
 |---|---|
@@ -156,7 +157,7 @@ Ethereum Sepolia，chain id 11155111。以 [`script/DeployEth.s.sol`](script/Dep
 | PausedImpl（緊急暫停目標） | [`0xb6573006fB607E96966d0F578B96AAB25413F5BE`](https://sepolia.etherscan.io/address/0xb6573006fB607E96966d0F578B96AAB25413F5BE) |
 | Chainlink MockKeystoneForwarder | [`0x15fC6ae953E024d975e77382eEeC56A9101f9F88`](https://sepolia.etherscan.io/address/0x15fC6ae953E024d975e77382eEeC56A9101f9F88) |
 
-七個提案，七個鏈上判決。每個連結上的數字是該筆交易被打包進的區塊；`(+n)` 表示 CRE 判決在提案之後第幾個區塊送達。
+第一輪執行：七個提案，七個鏈上判決（之後的 #8–#10 列在 [docs/evidence/sepolia-live.md](docs/evidence/sepolia-live.md) 中）。每個連結上的數字是該筆交易被打包進的區塊；`(+n)` 表示 CRE 判決在提案之後第幾個區塊送達。
 
 | 卡片 | 提案 | CRE 判決 | 提案交易 | 報告交易 | 後續 |
 |---|---|---|---|---|---|
@@ -194,7 +195,7 @@ export PATH="$PWD/cre/.tools/bin:$PWD/cre/.tools/node_modules/.bin:$PATH"
 (cd cre/veto && bun test && bun run typecheck)    # 118 個測試：規則、探測、位元組碼、報告、預算、handler
 
 # 戰情室
-(cd web && npm ci && npm run selftest)            # 199 項檢查：即時檢視與離線重播
+(cd web && npm ci && npm run selftest)            # 394 項檢查：即時檢視與攻擊選擇器、離線重播、操作員 API
 ```
 
 ### 在 Sepolia 分叉鏈上端對端執行
@@ -212,7 +213,7 @@ cre/scripts/fork-e2e.sh         # 在本機 anvil 分叉的 Sepolia 上執行：
 
 ### Sepolia 操作工具包
 
-[`scripts/sepolia/`](scripts/sepolia/README.md) 負責執行線上展示。金鑰存放在儲存庫之外，`KEY_DIR` 中每個檔案存一把十六進位金鑰（`owner`、`attester`、`sender`、`approver`、`emergency`）；腳本從不印出金鑰，而且除非 owner、approver、緊急 guardian 與 attester 是四把不同的金鑰，否則 `deploy.sh` 會拒絕執行。每個腳本也都能加上 `FORK=<port>` 對本機分叉鏈執行，整套展示可以零成本預演。
+[`scripts/sepolia/`](scripts/sepolia/README.md) 負責執行線上展示。金鑰存放在儲存庫之外，`KEY_DIR` 中每個檔案存一把十六進位金鑰（`owner.key`、`attester.key`、`sender.key`、`approver.key`、`emergency.key`，另可選 `sweeper.key`）；腳本從不印出金鑰，而且除非 owner、approver、緊急 guardian 與 attester 是四把不同的金鑰，否則 `deploy.sh` 會拒絕執行。每個腳本也都能加上 `FORK=<port>` 對本機分叉鏈執行，整套展示可以零成本預演。
 
 ```bash
 scripts/sepolia/deploy.sh                    # 13 筆交易，寫出 deployments/sepolia.json（FORCE=1 會取代既有的部署）
@@ -235,7 +236,7 @@ npm run dev                     # http://127.0.0.1:5173/
 npm run build:airlock           # 把 deployments/sepolia.json 同步進頁面，建置 web/dist-airlock
 ```
 
-戰情室直接讀取 Sepolia，從不簽署也不送出任何交易。它把每個提案呈現為一座氣閘：冷靜期、CRE 放行，以及附上規則與證據的否決。
+頁面直接讀取 Sepolia，不持有金鑰，從不簽署也不送出任何交易。它把每個提案呈現為一座氣閘：冷靜期、CRE 放行，以及附上規則與證據的否決。訪客可以從七張卡（六種攻擊與正常升級 v2）中選一張，觀看同類在 Sepolia 上最新一筆真實提案的重播（畫面標明是重播；該攻擊正處於冷靜期時，則顯示那筆即時提案），見[攻擊選擇器](web/README.md#attack-picker-what-a-visitor-sees)。展示者另有一個操作員模式（`web/operator/`、`web/functions/`）：在開發伺服器上只接受本機連線；在 Cloudflare Pages 上要憑口令，而且只有 `OWNER_KEY` 與 `OPERATOR_TOKEN` 兩個 secret 都存在時才會開啟。它透過 `POST /api/operator/propose` 送出同樣七種固定提案之一，由伺服器端用 owner 金鑰簽署（設計本來就假設這把金鑰會外洩：它只能提案）；一般訪客的頁面從不呼叫它，見[操作員模式](web/README.md#operator-mode-real-attacks-on-sepolia)。
 
 | URL 參數 | 作用 |
 |---|---|
@@ -243,8 +244,9 @@ npm run build:airlock           # 把 deployments/sepolia.json 同步進頁面�
 | `?mode=offline` | 完全不連網，播放一段事先錄製的執行過程 |
 | `?lang=en`, `?lang=zh-TW`, `?lang=zh-CN` | 介面語言（預設 `zh-CN`；按 `L` 循環切換） |
 | `?rpc=http://127.0.0.1:<port>` | 改為讀取本機的 Sepolia 分叉鏈，供預演使用 |
+| `?op=1` | 操作員模式：要求輸入操作員口令（僅供展示者） |
 
-在即時模式下按 `P`，即可依鏈上事件重播最近的提案。
+在即時模式下按 `P`，即可依鏈上事件重播最近的提案；按 `1` 到 `7` 重播選擇器上對應的攻擊卡。
 
 ## 儲存庫結構
 
@@ -266,6 +268,7 @@ cre/scripts/fork-e2e.sh         在 anvil 分叉的 Sepolia 上端對端執行
 cre/setup.sh                    鎖定版本的 CRE CLI 與 bun
 scripts/sepolia/                即時展示的操作工具包，附伺服器用的 systemd units
 web/                            戰情室（Vite、TypeScript、viem）
+web/operator/, web/functions/   操作員模式：由伺服器端簽署的七種固定提案（開發伺服器、Pages Functions）
 deployments/sepolia.json        線上部署資訊
 docs/design.md                  威脅模型、放行狀態機、報告綁定、預算
 docs/evidence/                  上線執行的紀錄
@@ -287,7 +290,7 @@ Upgrade Airlock 假設 owner 金鑰會外洩，並確保光靠 owner 金鑰永�
 
 角色絕不重疊。`AirlockAdmin` 的建構函式會拒絕同時身兼 approver、guardian 或放行預言機的 owner（`RoleOverlap`），而 `DeployEth` 只有在 owner、approver、緊急 guardian 與 attester 是四個不同地址時才會部署。
 
-**外洩的 owner 金鑰可以提案。** 每個提案都要在眾目睽睽之下等完冷靜期，同時由 CRE 判定，而且還需要一個 owner 無法自行給予的放行。owner 也能拉下緊急煞車（`breakGlass`），但這只會把代理合約切換到事先登記的暫停實作；要離開暫停狀態，必須是一次通過兩道門的升級。
+**外洩的 owner 金鑰可以提案。** 每個提案都要在眾目睽睽之下等完冷靜期，同時由 CRE 判定，而且還需要一個 owner 無法自行給予的放行。owner 也能拉下緊急煞車（`breakGlass`），但這只會把代理合約切換到事先登記的暫停實作；要離開暫停狀態，必須是一次通過兩道門的升級，而較早放行卻從未執行的升級也能結束暫停。
 
 **同一把金鑰無法：**
 
@@ -297,6 +300,8 @@ Upgrade Airlock 假設 owner 金鑰會外洩，並確保光靠 owner 金鑰永�
 - 偽造或重複使用判決：`AirlockReceiver` 只接受來自設定好的 forwarder、由 attester 簽署、未超過 `validUntilBlock`，且綁定到本鏈與本接收合約上該提案 `proposalDigest` 的報告。
 
 approver 的手動放行是 CRE 無法回應時才使用的人工覆寫：只要該提案仍在最新的 20 個 id 之內，定時掃描依然會判定它，而 CRE 或 guardian 的否決優先。完整的威脅模型見 [docs/design.md](docs/design.md#threat-model)。
+
+這些是測試網展示合約，存在已知限制，每一項都有一個通過的測試固定下來：放行永不過期；owner 金鑰無法輪替（被盜的金鑰可以在每次解除暫停後再次暫停代幣）；一個惡意 guardian 就能讓代幣一直保持暫停。完整列表見 [docs/design.md](docs/design.md#known-limitations)。
 
 ## 使用技術
 

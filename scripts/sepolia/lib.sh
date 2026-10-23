@@ -73,11 +73,29 @@ addr_of() {
 
 # ---------------------------------------------------------------- chain
 
+# rpc_retry <command...>: runs a read-only chain command up to RPC_TRIES times (default 3), 2 s apart, so a transient
+# RPC error (a rate limit, a reset connection, a load-balanced node without the data) does not stop a stage command.
+# Only the last attempt's error is shown. Never wrap anything that sends a transaction (send_as): a retry could send
+# it twice.
+rpc_retry() {
+  local n=${RPC_TRIES:-3} i=1 out
+  while :; do
+    if [ "$i" -lt "$n" ]; then
+      if out=$("$@" 2>/dev/null); then printf '%s\n' "$out"; return 0; fi
+    else
+      if out=$("$@"); then printf '%s\n' "$out"; return 0; fi
+      return 1
+    fi
+    i=$((i + 1))
+    sleep 2
+  done
+}
+
 # The RPC must be Sepolia (chain id 11155111); in FORK mode it must also be an anvil node on loopback, so a FORK run
 # can never send anything to a public network.
 check_rpc() {
   local cid cv
-  cid=$(cast chain-id --rpc-url "$RPC" 2>/dev/null) || die "no RPC answering at $RPC${FORK:+ (start the fork: FORK=$FORK $KIT/fork.sh start)}"
+  cid=$(rpc_retry cast chain-id --rpc-url "$RPC" 2>/dev/null) || die "no RPC answering at $RPC${FORK:+ (start the fork: FORK=$FORK $KIT/fork.sh start)}"
   [ "$cid" = "$CHAIN_ID" ] || die "chain id $cid at $RPC, expected $CHAIN_ID (Sepolia)"
   if [ "$MODE" = fork ]; then
     cv=$(cast rpc web3_clientVersion --rpc-url "$RPC" 2>/dev/null | tr -d '"') || cv=unknown
@@ -85,8 +103,12 @@ check_rpc() {
   fi
 }
 
-block_now() { cast block-number --rpc-url "$RPC"; }
-block_ts() { cast to-dec "$(cast rpc eth_getBlockByNumber "$(printf '0x%x' "$1")" false --rpc-url "$RPC" | jq -r .timestamp)"; }
+block_now() { rpc_retry cast block-number --rpc-url "$RPC"; }
+block_ts() {
+  local b
+  b=$(rpc_retry cast rpc eth_getBlockByNumber "$(printf '0x%x' "$1")" false --rpc-url "$RPC") || return 1
+  cast to-dec "$(jq -r .timestamp <<<"$b")"
+}
 
 # dep <key>: a field of the deployment JSON (airlockAdmin, receiver, evilMint, ...).
 dep() {
@@ -129,17 +151,18 @@ if [ -f "$ROOT/cre/veto/rules.ts" ]; then
   unset _ids
 fi
 
-# proposal <id>: "kind status target readyBlock vetoCount proposedBlock" (numbers as decimals).
+# proposal <id>: "kind status target readyBlock vetoCount proposedBlock" (numbers as decimals). Fails (status 1, no
+# output) when the RPC does not answer after the retries.
 proposal() {
   local ga raw
   ga=$(dep airlockAdmin)
-  raw=$(cast call "$ga" "$PROPOSAL_SIG" "$1" --rpc-url "$RPC")
+  raw=$(rpc_retry cast call "$ga" "$PROPOSAL_SIG" "$1" --rpc-url "$RPC") || return 1
   # (kind, status, proposer, target, value, codehash, dataHash, proposedBlock, readyBlock, vetoCount)
   sed -E 's/^\((.*)\)$/\1/; s/ \[[^]]*\]//g' <<<"$raw" | awk -F', ' '{print $1, $2, $4, $9, $10, $8}'
 }
 
 # clearance <id>: the evidence hash AirlockAdmin recorded for the proposal, or 0x00..00 when it is not cleared.
-clearance() { cast call "$(dep airlockAdmin)" 'clearanceOf(uint256)(bytes32)' "$1" --rpc-url "$RPC"; }
+clearance() { rpc_retry cast call "$(dep airlockAdmin)" 'clearanceOf(uint256)(bytes32)' "$1" --rpc-url "$RPC"; }
 
 # oracle_judged <id>: true once the clearance oracle (the CRE receiver) has answered the proposal with a Clear or a
 # Veto, false while it has not (also after an approver's clearance: the sweeper still judges it, and a CRE veto
@@ -184,25 +207,72 @@ who_name() {
 #   "cleared  <id> <evidenceHash> <clearer>  <tx> <block>"
 #   "reason   <id> <reportHash>   <guardian> <tx> <block>"
 #   "executed <id> -              <executor> <tx> <block>"
-# EVENTS_FROM (a block number) overrides the start, for RPCs that limit eth_getLogs ranges.
+# One eth_getLogs from the deployment block is refused by most public RPCs (publicnode answers some requests with
+# 4444 "pruned history unavailable", drpc's free plan caps the range), so the scan runs in windows of EVENTS_CHUNK
+# blocks (default 5000). Each window is asked of every history RPC in turn, for up to RPC_TRIES rounds 2 s apart:
+# live, HISTORY_RPC (comma-separated) or else SEPOLIA_RPC and then the Tenderly public gateway, which keeps the full
+# history; a fork run reads only its anvil (HISTORY_RPC is ignored there). A window no RPC serves is skipped with a
+# warning on stderr (rows in it show '-' for the rule, evidence and verdict tx), and the function never fails, so
+# `set -e` callers keep going.
+# EVENTS_FROM (a block number) starts the scan later.
+HISTORY_FALLBACK=https://sepolia.gateway.tenderly.co
 events_since() {
-  local ga tv tc tr te
+  local ga tv tc tr te from to lo hi chunk url got round all='' skipped=0
+  local -a urls
   ga=$(dep airlockAdmin)
+  from=${EVENTS_FROM:-$1}
+  chunk=${EVENTS_CHUNK:-5000}
+  [[ "$from" =~ ^[0-9]+$ ]] || { say "warning: event scan start '$from' is not a block number; no events read" >&2; return 0; }
+  [[ "$chunk" =~ ^[1-9][0-9]*$ ]] || chunk=5000
+  if [ "$MODE" = fork ]; then
+    urls=("$RPC") # a fork run talks to the loopback anvil only, whatever HISTORY_RPC says
+  elif [ -n "${HISTORY_RPC:-}" ]; then
+    IFS=',' read -r -a urls <<<"$HISTORY_RPC"
+  else
+    urls=("$RPC" "$HISTORY_FALLBACK")
+  fi
+  [ "${#urls[@]}" -gt 0 ] || urls=("$RPC")
+  to=$(block_now 2>/dev/null) || { say "warning: no block number from $RPC; no events read" >&2; return 0; }
   tv=$(cast keccak 'Vetoed(uint256,address,bytes32,uint256)')
   tc=$(cast keccak 'Cleared(uint256,address,bytes32)')
   tr=$(cast keccak 'ReasonAttached(uint256,address,bytes32)')
   te=$(cast keccak 'Executed(uint256,address)')
-  cast logs --from-block "${EVENTS_FROM:-$1}" --to-block latest --address "$ga" --rpc-url "$RPC" --json \
-    | jq -r --arg tv "$tv" --arg tc "$tc" --arg tr "$tr" --arg te "$te" '
-        def w(i): .data[2 + 64 * i: 66 + 64 * i];
-        def addr(x): "0x" + x[24:64];
-        .[] | . as $l
-        | (if .topics[0] == $tv then "vetoed \(.topics[1]) 0x\(w(0)) \(addr(.topics[2][2:]))"
-           elif .topics[0] == $tc then "cleared \(.topics[1]) 0x\(w(0)) \(addr(.topics[2][2:]))"
-           elif .topics[0] == $tr then "reason \(.topics[1]) 0x\(w(1)) \(addr(w(0)))"
-           elif .topics[0] == $te then "executed \(.topics[1]) - \(addr(w(0)))"
-           else empty end) + " \($l.transactionHash) \($l.blockNumber)"' \
-    | while read -r kind idhex v who tx bn; do say "$kind $(cast to-dec "$idhex") $v $who $tx $(cast to-dec "$bn")"; done
+  for ((lo = from; lo <= to; lo += chunk)); do
+    hi=$((lo + chunk - 1))
+    [ "$hi" -le "$to" ] || hi=$to
+    got=
+    for ((round = 1; round <= ${RPC_TRIES:-3}; round++)); do
+      for url in "${urls[@]}"; do
+        if got=$(logs_window "$url" "$lo" "$hi" "$ga"); then break 2; fi
+        got=
+      done
+      [ "$round" -lt "${RPC_TRIES:-3}" ] && sleep 2
+    done
+    if [ -n "$got" ]; then all+="$got"$'\n'; else skipped=$((skipped + 1)); say "warning: no RPC served AirlockAdmin events in blocks $lo-$hi" >&2; fi
+  done
+  [ "$skipped" = 0 ] || say "warning: $skipped event window(s) skipped: rows there show '-' for the rule, evidence and verdict tx (set HISTORY_RPC to an RPC that keeps the history, or EVENTS_FROM to a recent block)" >&2
+  [ -n "$all" ] || return 0
+  jq -rs --arg tv "$tv" --arg tc "$tc" --arg tr "$tr" --arg te "$te" '
+      def w(i): .data[2 + 64 * i: 66 + 64 * i];
+      def addr(x): "0x" + x[24:64];
+      def num: ltrimstr("0x") | ascii_downcase | explode
+        | reduce .[] as $c (0; . * 16 + (if $c >= 97 then $c - 87 else $c - 48 end));
+      add | .[] | . as $l
+      | (if .topics[0] == $tv then "vetoed \(.topics[1] | num) 0x\(w(0)) \(addr(.topics[2][2:]))"
+         elif .topics[0] == $tc then "cleared \(.topics[1] | num) 0x\(w(0)) \(addr(.topics[2][2:]))"
+         elif .topics[0] == $tr then "reason \(.topics[1] | num) 0x\(w(1)) \(addr(w(0)))"
+         elif .topics[0] == $te then "executed \(.topics[1] | num) - \(addr(w(0)))"
+         else empty end) + " \($l.transactionHash) \($l.blockNumber | num)"' <<<"$all" \
+    || { say "warning: could not parse the event logs; no events read" >&2; return 0; }
+}
+
+# logs_window <rpc> <from> <to> <address>: one eth_getLogs; the JSON array on stdout, or status 1 (cast prints an
+# error object instead of an array when the RPC refuses).
+logs_window() {
+  local out
+  out=$(cast logs --from-block "$2" --to-block "$3" --address "$4" --rpc-url "$1" --json 2>/dev/null) || return 1
+  jq -e 'type == "array"' >/dev/null 2>&1 <<<"$out" || return 1
+  printf '%s\n' "$out"
 }
 
 # first_event <kind> <id> <events text>: the first matching line ("kind id value who tx block") or nothing.

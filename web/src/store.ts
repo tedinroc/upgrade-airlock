@@ -23,6 +23,11 @@ export interface GuardAction {
   evidenceHash?: string
   /** CRE only: workflowId from the report metadata (Verdict) */
   workflowId?: string
+  /** Order (block * 1e6 + logIndex) of the Vetoed log whose block and tx are kept: the first one. A mined veto report
+   *  can be re-sent by anyone while it is valid, and AirlockAdmin emits Vetoed again; that replay never replaces it */
+  vetoOrder?: number
+  /** Order of the Verdict log whose workflowId and evidence hash are kept (the first one, for the same reason) */
+  verdictOrder?: number
 }
 
 /** The first accepted clearance (AirlockAdmin keeps the first evidence hash) */
@@ -51,8 +56,8 @@ export interface Proposal {
   guards: Record<GuardId, GuardAction>
   clearance?: Clearance
   execute?: { tx: string; block: number }
-  /** ReasonAttached: the evidence hash written next to a veto */
-  reason?: { tx: string; hash: string; block: number }
+  /** ReasonAttached: the evidence hash written next to a veto (the first one; order = block * 1e6 + logIndex) */
+  reason?: { tx: string; hash: string; block: number; order?: number }
   /** getProposal + clearanceOf as read from the chain (status 0 None, 1 Pending, 2 Vetoed, 3 Executed) */
   chain?: { status: number; vetoCount: number; proposer: string; clearanceOf: string | null }
   /** The proposal's log disappeared in a reorg */

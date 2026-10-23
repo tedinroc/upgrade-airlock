@@ -4,6 +4,9 @@
 //   bun tools/check-evidence.ts <rpc-url> <deployment.json>
 //
 // The deployment JSON is the one script/DeployEth.s.sol writes (chainId, startBlock, airlockAdmin, receiver).
+// The Verdict logs are read from startBlock in windows of 10,000 blocks, each tried up to 3 times. Some public RPCs
+// refuse old logs (publicnode answers some requests with 4444 "pruned history unavailable"); on live Sepolia pass one
+// that keeps the history, e.g. https://sepolia.gateway.tenderly.co.
 import { type Address, createPublicClient, type Hex, http } from 'viem'
 import { ACTION, AIRLOCK_ADMIN_ABI, RECEIVER_ABI } from '../abi'
 import { canonicalEvidence, evidenceHashOf, proposalDigest } from '../report'
@@ -18,7 +21,27 @@ const d = (await Bun.file(file).json()) as { chainId: number; startBlock: number
 const client = createPublicClient({ transport: http(rpc) })
 const byHash = new Map(RULE_IDS.map((r) => [ruleHash(r), r]))
 
-const logs = await client.getContractEvents({ address: d.receiver, abi: RECEIVER_ABI, eventName: 'Verdict', fromBlock: BigInt(d.startBlock), toBlock: 'latest' })
+const WINDOW = 10_000n
+const TRIES = 3
+const verdictLogs = (fromBlock: bigint, toBlock: bigint) =>
+  client.getContractEvents({ address: d.receiver, abi: RECEIVER_ABI, eventName: 'Verdict', fromBlock, toBlock })
+const logs: Awaited<ReturnType<typeof verdictLogs>> = []
+const head = await client.getBlockNumber()
+for (let lo = BigInt(d.startBlock); lo <= head; lo += WINDOW) {
+  const hi = lo + WINDOW - 1n < head ? lo + WINDOW - 1n : head
+  for (let attempt = 1; ; attempt++) {
+    try {
+      logs.push(...(await verdictLogs(lo, hi)))
+      break
+    } catch (e) {
+      if (attempt >= TRIES) {
+        console.error(`blocks ${lo}-${hi}: the RPC refused the Verdict logs ${TRIES} times (pass an RPC that keeps the history)`)
+        throw e
+      }
+      await Bun.sleep(2000)
+    }
+  }
+}
 let bad = 0
 for (const log of logs) {
   const { proposalId, action, ruleHash: rh, evidenceHash } = log.args as { proposalId: bigint; action: number; ruleHash: Hex; evidenceHash: Hex }
