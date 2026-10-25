@@ -6,7 +6,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · **Русский** · [Tiếng Việt](README.vi.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/tedinroc/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/tedinroc/upgrade-airlock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live demo](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
 [![Demo video](https://img.shields.io/badge/demo%20video-watch-red)](https://upgrade-airlock.pages.dev/video/)
@@ -16,6 +16,8 @@
 [Ключевые особенности](#highlights) · [Как это работает](#how-it-works) · [Правила](#rules) · [Chainlink CRE](#chainlink-cre) · [В сети Sepolia](#live-on-sepolia) · [Быстрый старт](#quick-start) · [Модель безопасности](#security-model)
 
 </div>
+
+> **2nd place, ETH Shenzhen 2026.** This is Ted Chen's copy of the entry; the official submission is [gitlab.com/jiapunk/upgrade-airlock](https://gitlab.com/jiapunk/upgrade-airlock).
 
 ## Обзор
 
@@ -182,7 +184,7 @@ Ethereum Sepolia, chain id 11155111. Развёртывание выполнен
 ### Сборка и тесты
 
 ```bash
-git clone https://github.com/jiapunk/upgrade-airlock.git
+git clone https://github.com/tedinroc/upgrade-airlock.git
 cd upgrade-airlock
 
 # контракты (OpenZeppelin и forge-std уже включены в lib/)

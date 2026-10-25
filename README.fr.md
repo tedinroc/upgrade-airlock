@@ -6,7 +6,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · **Français** · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md) · [Tiếng Việt](README.vi.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/tedinroc/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/tedinroc/upgrade-airlock/actions/workflows/ci.yml)
 [![Licence : MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Démo en ligne](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
 [![Vidéo de démo](https://img.shields.io/badge/demo%20video-watch-red)](https://upgrade-airlock.pages.dev/video/)
@@ -16,6 +16,8 @@
 [Points forts](#highlights) · [Fonctionnement](#how-it-works) · [Règles](#rules) · [Chainlink CRE](#chainlink-cre) · [En direct sur Sepolia](#live-on-sepolia) · [Démarrage rapide](#quick-start) · [Modèle de sécurité](#security-model)
 
 </div>
+
+> **2nd place, ETH Shenzhen 2026.** This is Ted Chen's copy of the entry; the official submission is [gitlab.com/jiapunk/upgrade-airlock](https://gitlab.com/jiapunk/upgrade-airlock).
 
 ## Vue d'ensemble
 
@@ -309,7 +311,7 @@ lignes de log du workflow lui-même figurent dans [`docs/evidence/sepolia-live.m
 ### Compiler et tester
 
 ```bash
-git clone https://github.com/jiapunk/upgrade-airlock.git
+git clone https://github.com/tedinroc/upgrade-airlock.git
 cd upgrade-airlock
 
 # contrats (OpenZeppelin et forge-std sont embarqués dans lib/)

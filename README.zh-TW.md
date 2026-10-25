@@ -6,7 +6,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md) · **繁體中文** · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md) · [Tiếng Việt](README.vi.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/jiapunk/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/jiapunk/upgrade-airlock/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/tedinroc/upgrade-airlock/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/tedinroc/upgrade-airlock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live demo](https://img.shields.io/badge/live%20demo-upgrade--airlock.pages.dev-2ea44f)](https://upgrade-airlock.pages.dev)
 [![Demo video](https://img.shields.io/badge/demo%20video-watch-red)](https://upgrade-airlock.pages.dev/video/)
@@ -16,6 +16,8 @@
 [亮點](#highlights) · [運作方式](#how-it-works) · [規則](#rules) · [Chainlink CRE](#chainlink-cre) · [Sepolia 上線實況](#live-on-sepolia) · [快速開始](#quick-start) · [安全模型](#security-model)
 
 </div>
+
+> **ETH Shenzhen 2026 第二名。** 這是 Ted Chen 帳號下的作品副本；正式參賽版本在 [gitlab.com/jiapunk/upgrade-airlock](https://gitlab.com/jiapunk/upgrade-airlock)。
 
 ## 概覽
 
@@ -182,7 +184,7 @@ Ethereum Sepolia，chain id 11155111。以 [`script/DeployEth.s.sol`](script/Dep
 ### 建置與測試
 
 ```bash
-git clone https://github.com/jiapunk/upgrade-airlock.git
+git clone https://github.com/tedinroc/upgrade-airlock.git
 cd upgrade-airlock
 
 # 合約（OpenZeppelin 與 forge-std 已內附於 lib/）
